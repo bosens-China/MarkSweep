@@ -1,0 +1,289 @@
+import { fetch as undiciFetch } from "undici";
+import pLimit from "p-limit";
+import type { ExtractedBookmark } from "../parser/bookmark-html.js";
+import type { BookmarkCheckReason, BookmarkCheckResult, BookmarkCheckStatus, BookmarkCheckSummary } from "./types.js";
+
+export interface CheckBookmarksOptions {
+  concurrency: number;
+  timeout: number;
+  retries: number;
+}
+
+export interface FetchLikeResponse {
+  status: number;
+  url?: string;
+  body?: {
+    cancel?: () => Promise<void> | void;
+  } | null;
+}
+
+export type FetchLike = (
+  url: string,
+  init: {
+    method: "HEAD" | "GET";
+    signal: AbortSignal;
+    redirect: "follow";
+    headers: Record<string, string>;
+  },
+) => Promise<FetchLikeResponse>;
+
+export interface CheckBookmarksContext {
+  fetcher?: FetchLike;
+}
+
+const defaultHeaders = {
+  "user-agent": "MarkSweep/0.1 (+https://www.npmjs.com/package/@boses/marksweep)",
+  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+};
+
+export async function checkBookmarks(
+  bookmarks: ExtractedBookmark[],
+  options: CheckBookmarksOptions,
+  context: CheckBookmarksContext = {},
+): Promise<BookmarkCheckResult[]> {
+  const limit = pLimit(options.concurrency);
+  const fetcher = context.fetcher ?? undiciFetch;
+
+  return Promise.all(bookmarks.map((bookmark) => limit(() => checkBookmark(bookmark, options, fetcher))));
+}
+
+export async function checkBookmark(
+  bookmark: ExtractedBookmark,
+  options: CheckBookmarksOptions,
+  fetcher: FetchLike = undiciFetch,
+): Promise<BookmarkCheckResult> {
+  if (!bookmark.isWebUrl) {
+    return {
+      bookmark,
+      status: "skipped",
+      reason: "non_web_url",
+      attempts: 0,
+    };
+  }
+
+  const maxAttempts = options.retries + 1;
+  let lastResult: BookmarkCheckResult | undefined;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const headResult = await requestAndClassify(bookmark, "HEAD", attempt, options.timeout, fetcher);
+
+    if (headResult.status === "valid") {
+      return headResult;
+    }
+
+    const getResult = await requestAndClassify(bookmark, "GET", attempt, options.timeout, fetcher);
+    lastResult = getResult.status === "valid" ? getResult : preferMoreCertainResult(headResult, getResult);
+
+    if (lastResult.status === "valid" || !isRetryable(lastResult)) {
+      return lastResult;
+    }
+  }
+
+  return (
+    lastResult ?? {
+      bookmark,
+      status: "suspicious",
+      reason: "network_error",
+      attempts: maxAttempts,
+      error: "No request result was produced.",
+    }
+  );
+}
+
+export function summarizeCheckResults(results: BookmarkCheckResult[]): BookmarkCheckSummary {
+  const summary: BookmarkCheckSummary = {
+    total: results.length,
+    valid: 0,
+    broken: 0,
+    suspicious: 0,
+    skipped: 0,
+    networkMayBeUnreliable: false,
+  };
+
+  for (const result of results) {
+    summary[result.status] += 1;
+  }
+
+  const webResults = results.filter((result) => result.status !== "skipped");
+  const transientNetworkFailures = webResults.filter((result) =>
+    ["timeout", "network_error", "ssl_error"].includes(result.reason),
+  );
+
+  summary.networkMayBeUnreliable =
+    webResults.length >= 10 && transientNetworkFailures.length / webResults.length >= 0.6;
+
+  return summary;
+}
+
+function preferMoreCertainResult(first: BookmarkCheckResult, second: BookmarkCheckResult): BookmarkCheckResult {
+  const certainty: Record<BookmarkCheckStatus, number> = {
+    valid: 4,
+    broken: 3,
+    suspicious: 2,
+    skipped: 1,
+  };
+
+  return certainty[second.status] >= certainty[first.status] ? second : first;
+}
+
+async function requestAndClassify(
+  bookmark: ExtractedBookmark,
+  method: "HEAD" | "GET",
+  attempt: number,
+  timeout: number,
+  fetcher: FetchLike,
+): Promise<BookmarkCheckResult> {
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetcher(bookmark.url, {
+      method,
+      signal: controller.signal,
+      redirect: "follow",
+      headers: method === "GET" ? { ...defaultHeaders, range: "bytes=0-0" } : defaultHeaders,
+    });
+
+    await response.body?.cancel?.();
+
+    return classifyHttpStatus(bookmark, response.status, method, attempt);
+  } catch (error) {
+    return classifyRequestError(bookmark, error, method, attempt);
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
+
+function classifyHttpStatus(
+  bookmark: ExtractedBookmark,
+  httpStatus: number,
+  method: "HEAD" | "GET",
+  attempts: number,
+): BookmarkCheckResult {
+  if (httpStatus >= 200 && httpStatus < 300) {
+    return { bookmark, status: "valid", reason: "ok", method, attempts, httpStatus };
+  }
+
+  if (httpStatus >= 300 && httpStatus < 400) {
+    return { bookmark, status: "valid", reason: "redirect", method, attempts, httpStatus };
+  }
+
+  if (httpStatus === 404) {
+    return { bookmark, status: "broken", reason: "not_found", method, attempts, httpStatus };
+  }
+
+  if (httpStatus === 410) {
+    return { bookmark, status: "broken", reason: "gone", method, attempts, httpStatus };
+  }
+
+  if (httpStatus === 401) {
+    return { bookmark, status: "suspicious", reason: "auth_required", method, attempts, httpStatus };
+  }
+
+  if (httpStatus === 403) {
+    return { bookmark, status: "suspicious", reason: "forbidden", method, attempts, httpStatus };
+  }
+
+  if (httpStatus === 429) {
+    return { bookmark, status: "suspicious", reason: "rate_limited", method, attempts, httpStatus };
+  }
+
+  if (httpStatus >= 500) {
+    return { bookmark, status: "suspicious", reason: "server_error", method, attempts, httpStatus };
+  }
+
+  return { bookmark, status: "suspicious", reason: "http_error", method, attempts, httpStatus };
+}
+
+function classifyRequestError(
+  bookmark: ExtractedBookmark,
+  error: unknown,
+  method: "HEAD" | "GET",
+  attempts: number,
+): BookmarkCheckResult {
+  const code = getErrorCode(error);
+  const message = getErrorMessage(error);
+  const reason = classifyErrorReason(code, message);
+  const status: BookmarkCheckStatus = ["dns_not_found", "connection_refused", "empty_response"].includes(reason)
+    ? "broken"
+    : "suspicious";
+
+  return {
+    bookmark,
+    status,
+    reason,
+    method,
+    attempts,
+    error: message,
+  };
+}
+
+function classifyErrorReason(code: string | undefined, message: string): BookmarkCheckReason {
+  const lowerMessage = message.toLowerCase();
+
+  if (code === "ABORT_ERR" || code === "AbortError" || lowerMessage.includes("abort")) {
+    return "timeout";
+  }
+
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
+    return "dns_not_found";
+  }
+
+  if (code === "ECONNREFUSED") {
+    return "connection_refused";
+  }
+
+  if (
+    code === "ECONNRESET" ||
+    code === "UND_ERR_SOCKET" ||
+    lowerMessage.includes("empty response") ||
+    lowerMessage.includes("socket hang up") ||
+    lowerMessage.includes("other side closed") ||
+    lowerMessage.includes("terminated")
+  ) {
+    return "empty_response";
+  }
+
+  if (
+    code?.includes("CERT") ||
+    code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+    code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+    code === "SELF_SIGNED_CERT_IN_CHAIN" ||
+    lowerMessage.includes("certificate")
+  ) {
+    return "ssl_error";
+  }
+
+  return "network_error";
+}
+
+function isRetryable(result: BookmarkCheckResult): boolean {
+  return ["empty_response", "timeout", "server_error", "network_error", "ssl_error"].includes(result.reason);
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const candidate = error as { code?: unknown; name?: unknown; cause?: unknown };
+  if (typeof candidate.code === "string") {
+    return candidate.code;
+  }
+
+  const cause = candidate.cause;
+  if (cause && typeof cause === "object" && typeof (cause as { code?: unknown }).code === "string") {
+    return (cause as { code: string }).code;
+  }
+
+  return typeof candidate.name === "string" ? candidate.name : undefined;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const cause = error.cause instanceof Error ? ` ${error.cause.message}` : "";
+    return `${error.message}${cause}`;
+  }
+
+  return String(error);
+}

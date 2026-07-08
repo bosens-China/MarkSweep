@@ -1,0 +1,75 @@
+{
+  "name": "@boses/marksweep",
+  "version": "0.1.0",
+  "description": "A TypeScript CLI for cleaning and AI-organizing browser bookmark HTML exports.",
+  "type": "module",
+  "bin": {
+    "marksweep": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "bookmarks",
+    "cli",
+    "ai",
+    "langchain"
+  ],
+  "author": "yliu",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,cjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": "prettier --write"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.1.0",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.9.4",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.5.2",
+    "@langchain/core": "^1.2.1",
+    "@langchain/openai": "^1.5.3",
+    "chalk": "^5.6.2",
+    "cheerio": "^1.2.0",
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2",
+    "langchain": "^1.5.2",
+    "langsmith": "0.7.16",
+    "ora": "^9.4.1",
+    "p-limit": "^7.3.0",
+    "undici": "^8.7.0",
+    "zod": "^4.4.3"
+  }
+}

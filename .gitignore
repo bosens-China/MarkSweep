@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test and coverage output
+coverage/
+.vitest/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+marksweep.config.json
+
+# Local caches and temporary files
+.cache/
+.tmp/
+tmp/
+temp/
+
+# Package artifacts
+*.tgz
+
+# Personal bookmark exports and generated bookmark outputs
+bookmarks*.html
+*.cleaned.html
+*.classified.html
+
+# Agent-local files
+skills-lock.json
+
+# Editor and OS files
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
