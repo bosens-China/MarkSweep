@@ -208,7 +208,7 @@ export async function resolveAiConfig(
 
   if (interactive && promptedForConfig && context.offerToSave !== false) {
     const shouldSave = await prompts.confirm({
-      message: `是否保存 AI 配置到本机供下次复用？API Key 将明文保存到 ${configPath}`,
+      message: `是否将 AI 配置保存到本机，供下次复用？API Key 会以明文保存到 ${configPath}`,
       default: true,
     });
 

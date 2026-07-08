@@ -40,6 +40,20 @@ describe("checkBookmark", () => {
     });
   });
 
+  it("keeps a bookmark suspicious when GET disagrees with a broken HEAD response", async () => {
+    const fetcher: FetchLike = async (_url, init) => ({
+      status: init.method === "HEAD" ? 404 : 403,
+    });
+
+    await expect(
+      checkBookmark(createBookmark("https://head-only-missing.test"), defaultOptions(), fetcher),
+    ).resolves.toMatchObject({
+      status: "suspicious",
+      reason: "forbidden",
+      method: "GET",
+    });
+  });
+
   it("classifies removable broken responses", async () => {
     await expect(
       checkBookmark(createBookmark("https://missing.test"), defaultOptions(), fetchStatus(404)),
@@ -178,6 +192,26 @@ describe("checkBookmarks", () => {
       networkMayBeUnreliable: true,
       suspicious: 7,
       valid: 3,
+    });
+  });
+
+  it("marks a batch as unreliable when most web checks are network-classified broken failures", () => {
+    const networkReasons = ["dns_not_found", "connection_refused", "empty_response"] as const;
+    const results = Array.from(
+      { length: 10 },
+      (_, index) =>
+        ({
+          bookmark: createBookmark(`https://network-${index}.test`),
+          status: index < 6 ? "broken" : "valid",
+          reason: index < 6 ? networkReasons[index % networkReasons.length] : "ok",
+          attempts: 1,
+        }) as const,
+    );
+
+    expect(summarizeCheckResults(results)).toMatchObject({
+      networkMayBeUnreliable: true,
+      broken: 6,
+      valid: 4,
     });
   });
 });

@@ -51,7 +51,7 @@ interface OutputOption {
 
 type CheckOptions = DetectionOptions;
 type CleanOptions = DetectionOptions & OutputOption;
-type ClassifyOptions = RawAiOptions & RawLangSmithOptions & OutputOption;
+type ClassifyOptions = DetectionOptions & RawAiOptions & RawLangSmithOptions & OutputOption;
 
 interface CliDependencies {
   checkBookmarks: typeof checkBookmarks;
@@ -78,7 +78,7 @@ export function createProgram(dependencies: CliDependencies = defaultDependencie
     .description("检查书签有效性，并直接在 CLI 输出结果。")
     .argument("<input>", "浏览器导出的 bookmarks.html")
     .option("--concurrency <number>", "并发检测数量", parsePositiveInteger, 20)
-    .option("--timeout <ms>", "单个 URL 检测超时时间，单位毫秒", parsePositiveInteger, 10000)
+    .option("--timeout <ms>", "单个 URL 检测超时时间（毫秒）", parsePositiveInteger, 10000)
     .option("--retries <number>", "失败重试次数", parseNonNegativeInteger, 2)
     .action(async (inputPath: string, options: CheckOptions) => {
       await runCheckCommand(inputPath, options, dependencies);
@@ -90,7 +90,7 @@ export function createProgram(dependencies: CliDependencies = defaultDependencie
     .argument("<input>", "浏览器导出的 bookmarks.html")
     .option("-o, --output <path>", "输出 HTML 文件路径")
     .option("--concurrency <number>", "并发检测数量", parsePositiveInteger, 20)
-    .option("--timeout <ms>", "单个 URL 检测超时时间，单位毫秒", parsePositiveInteger, 10000)
+    .option("--timeout <ms>", "单个 URL 检测超时时间（毫秒）", parsePositiveInteger, 10000)
     .option("--retries <number>", "失败重试次数", parseNonNegativeInteger, 2)
     .action(async (inputPath: string, options: CleanOptions) => {
       await runCleanCommand(inputPath, options, dependencies);
@@ -101,11 +101,14 @@ export function createProgram(dependencies: CliDependencies = defaultDependencie
     .description("调用 AI 智能分类书签，并输出新的 HTML 文件。")
     .argument("<input>", "浏览器导出的 bookmarks.html")
     .option("-o, --output <path>", "输出 HTML 文件路径")
-    .option("--base-url <url>", "OpenAI-compatible API Base URL")
+    .option("--concurrency <number>", "并发检测数量", parsePositiveInteger, 20)
+    .option("--timeout <ms>", "单个 URL 检测超时时间（毫秒）", parsePositiveInteger, 10000)
+    .option("--retries <number>", "失败重试次数", parseNonNegativeInteger, 2)
+    .option("--base-url <url>", "OpenAI 兼容 API 的 Base URL")
     .option("--model <name>", "AI 模型名称")
     .option("--api-key <key>", "AI API Key")
     .option("--lang <language>", "分类目录语言，默认 zh")
-    .option("--langsmith", "启用 LangSmith tracing")
+    .option("--langsmith", "启用 LangSmith 追踪")
     .option("--langsmith-api-key <key>", "LangSmith API Key")
     .option("--langsmith-project <name>", "LangSmith 项目名，默认 marksweep")
     .option("--langsmith-endpoint <url>", "LangSmith API endpoint")
@@ -128,14 +131,14 @@ async function runCheckCommand(inputPath: string, options: CheckOptions, depende
   printDeduplicationSummary(deduped);
   printDetectionOptions(options);
 
-  const spinner = ora("正在检测书签有效性...").start();
+  const spinner = ora("正在检测书签有效性⋯⋯").start();
   const results = await dependencies.checkBookmarks(deduped.bookmarks, options);
   spinner.succeed("书签有效性检测完成");
 
   const summary = summarizeCheckResults(results);
   printCheckSummary(summary);
   printCheckResultList("明确无效", getBrokenResults(results));
-  printCheckResultList("可疑保留", getSuspiciousResults(results));
+  printCheckResultList("可疑（保留）", getSuspiciousResults(results));
 }
 
 async function runCleanCommand(inputPath: string, options: CleanOptions, dependencies: CliDependencies): Promise<void> {
@@ -150,7 +153,7 @@ async function runCleanCommand(inputPath: string, options: CleanOptions, depende
   printDetectionOptions(options);
   printOutputTarget(outputPath);
 
-  const spinner = ora("正在检测并清理书签...").start();
+  const spinner = ora("正在检测并清理书签⋯⋯").start();
   const results = await dependencies.checkBookmarks(deduped.bookmarks, options);
   const keptBookmarks = getKeptResults(results).map((result) => result.bookmark);
   const suspiciousBookmarks = getSuspiciousResults(results).map((result) => result.bookmark);
@@ -184,20 +187,40 @@ async function runClassifyCommand(
 
   printParsedSummary(parsed, inputFile);
   printDeduplicationSummary(deduped);
+  printDetectionOptions(options);
   printAiConfig(aiConfig);
   printLangSmithConfig(langSmithConfig);
   printOutputTarget(outputPath);
 
-  const spinner = ora("正在调用 AI 分类书签...").start();
   try {
-    const document = await dependencies.classifyBookmarks(deduped.bookmarks, aiConfig, {
-      lang: aiConfig.lang,
-      fetcherOptions: resolveWebPageFetcherConfig(),
-      callbacks: langSmithRuntime?.callbacks,
-    });
+    const checkSpinner = ora("正在检测待分类书签⋯⋯").start();
+    const results = await dependencies.checkBookmarks(deduped.bookmarks, options);
+    checkSpinner.succeed("待分类书签检测完成");
+
+    const summary = summarizeCheckResults(results);
+    const validBookmarks = results.filter((result) => result.status === "valid").map((result) => result.bookmark);
+    const otherBookmarks = results
+      .filter((result) => result.status === "suspicious" || result.status === "skipped")
+      .map((result) => result.bookmark);
+
+    printCheckSummary(summary);
+    printCheckResultList("分类前已跳过的明确无效书签", getBrokenResults(results));
+
+    const spinner = ora(validBookmarks.length > 0 ? "正在调用 AI 分类书签⋯⋯" : "正在生成分类 HTML⋯⋯").start();
+    let aiDocument = createBookmarkHtmlDocument([], { title: "Bookmarks" });
+
+    if (validBookmarks.length > 0) {
+      aiDocument = await dependencies.classifyBookmarks(validBookmarks, aiConfig, {
+        lang: aiConfig.lang,
+        fetcherOptions: resolveWebPageFetcherConfig(),
+        callbacks: langSmithRuntime?.callbacks,
+      });
+    }
+
+    const document = appendBookmarksToOtherFolder(aiDocument, otherBookmarks);
     const html = renderBookmarkHtml(document);
     await writeFile(outputPath, html, "utf8");
-    spinner.succeed("AI 分类后的书签 HTML 已生成");
+    spinner.succeed("分类后的书签 HTML 已生成");
   } finally {
     const traceError = await flushLangSmithRuntime(langSmithRuntime);
     if (traceError) {
@@ -205,6 +228,42 @@ async function runClassifyCommand(
       console.warn(chalk.yellow(`LangSmith trace 提交失败：${message}`));
     }
   }
+}
+
+function appendBookmarksToOtherFolder(
+  document: BookmarkHtmlDocument,
+  bookmarks: ExtractedBookmark[],
+): BookmarkHtmlDocument {
+  if (bookmarks.length === 0) {
+    return document;
+  }
+
+  const otherBookmarks = moveBookmarksToFolder(bookmarks, "其他");
+  let appended = false;
+  const folders = document.folders.map((folder) => {
+    if (folder.title !== "其他") {
+      return folder;
+    }
+
+    appended = true;
+    return {
+      ...folder,
+      bookmarks: [...folder.bookmarks, ...otherBookmarks],
+    };
+  });
+
+  if (!appended) {
+    folders.push({
+      title: "其他",
+      folders: [],
+      bookmarks: otherBookmarks,
+    });
+  }
+
+  return {
+    ...document,
+    folders,
+  };
 }
 
 export type { BookmarkCheckResult, BookmarkHtmlDocument, CliDependencies, ExtractedBookmark };

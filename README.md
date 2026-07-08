@@ -1,46 +1,47 @@
 # MarkSweep
 
-MarkSweep is a TypeScript CLI for cleaning broken browser bookmarks and reorganizing bookmarks with AI.
+English documentation: [README.en.md](README.en.md)
 
-It works with browser-exported `bookmarks.html` files, keeps the original file untouched, and writes cleaned or AI-classified results to new HTML files that can be imported back into Chrome, Edge, Firefox, and other browsers that support the Netscape bookmark export format.
+MarkSweep 是一个基于 TypeScript 编写的书签清理与整理 CLI 工具。它面向浏览器导出的 `bookmarks.html` 文件，可以检测失效书签、保留可疑书签，并借助 AI 生成新的多层分类目录。
 
-## Features
+MarkSweep 默认不修改原始书签文件。`clean` 和 `classify` 命令都会输出新的 HTML 文件，用户可以再将结果导入 Chrome、Edge、Firefox 等支持 Netscape 书签格式的浏览器。
 
-- Parse browser-exported `.html` / `.htm` bookmark files.
-- Check bookmark validity with configurable concurrency, timeout, and retries.
-- Remove only clearly broken links, such as `404`, `410`, DNS failures, refused connections, and repeated empty responses.
-- Keep suspicious links, such as timeouts, `401`, `403`, `429`, SSL errors, and possible anti-bot responses.
-- Deduplicate bookmarks using normalized URLs while keeping the more informative title.
-- Generate browser-importable bookmark HTML.
-- Classify bookmarks with an OpenAI-compatible model.
-- Let the AI decide when vague bookmark titles need extra page content.
-- Fetch page content through a LangChain agent tool with Firecrawl, Jina Reader, and plain HTML fallback.
+## 功能特性
 
-## Safety Model
+- 解析浏览器导出的 `.html` 和 `.htm` 书签文件。
+- 按并发数、超时时间和重试次数检测书签有效性。
+- 只删除明确无效的链接，例如 HTTP `404`、HTTP `410`、DNS 失败、连接被拒绝和重复空响应。
+- 保留超时、HTTP `401`、HTTP `403`、HTTP `429`、SSL 证书错误和疑似防爬等可疑链接。
+- 按规范化 URL 去重，并优先保留标题信息量更高的书签。
+- 生成浏览器可重新导入的书签 HTML 文件。
+- 使用 OpenAI 兼容 API 对有效书签进行 AI 分类。
+- 通过 LangChain 工具按需抓取页面内容，支持 Firecrawl、Jina Reader 和普通 HTML 抽取。
 
-MarkSweep is conservative by design.
+## 安全模型
 
-- It never modifies the original bookmark file.
-- `check` only prints a report.
-- `clean` writes a new cleaned HTML file.
-- `classify` writes a new AI-organized HTML file.
-- Suspicious links are kept instead of deleted.
-- AI failures stop the command before writing a partial classified file.
+MarkSweep 的默认策略偏保守。
 
-## Requirements
+- 不修改原始书签文件。
+- `check` 只在终端输出检测报告。
+- `clean` 输出新的清理后 HTML 文件。
+- `classify` 输出新的 AI 分类后 HTML 文件。
+- 可疑链接保留，不默认删除。
+- AI 调用失败时中断命令，不输出半成品分类文件。
+
+## 环境要求
 
 - Node.js `>=20`
-- pnpm for development
+- 本地开发建议使用 pnpm
 
-## Installation
+## 安装
 
-From npm, after the package is published:
+从 npm 安装（包发布后）：
 
 ```bash
 npm install -g @boses/marksweep
 ```
 
-For local development:
+本地开发：
 
 ```bash
 git clone <repo-url>
@@ -49,33 +50,33 @@ pnpm install
 pnpm build
 ```
 
-Run the local CLI:
+运行本地 CLI：
 
 ```bash
 pnpm dev -- --help
 ```
 
-Run the built CLI:
+运行构建产物：
 
 ```bash
 node dist/cli.js --help
 ```
 
-## Quick Start
+## 快速上手
 
-Export your bookmarks from your browser as an HTML file, then run:
+先从浏览器导出书签 HTML 文件，然后运行检测命令：
 
 ```bash
 marksweep check bookmarks.html
 ```
 
-Clean clearly broken bookmarks and write a new file:
+清理明确无效的书签，并输出新文件：
 
 ```bash
 marksweep clean bookmarks.html --output bookmarks.cleaned.html
 ```
 
-Classify bookmarks with AI and write a new file:
+调用 AI 分类有效书签，并输出新文件：
 
 ```bash
 marksweep classify bookmarks.html \
@@ -85,18 +86,18 @@ marksweep classify bookmarks.html \
   --output bookmarks.classified.html
 ```
 
-If `--output` is omitted, MarkSweep writes next to the input file:
+如果不指定 `--output`，MarkSweep 会在输入文件同级目录生成默认文件：
 
 ```txt
 bookmarks.cleaned.html
 bookmarks.classified.html
 ```
 
-## Commands
+## 命令
 
 ### `marksweep check <input>`
 
-Checks bookmark validity and prints the result in the terminal.
+检测书签有效性，并在终端输出结果。
 
 ```bash
 marksweep check bookmarks.html \
@@ -105,21 +106,21 @@ marksweep check bookmarks.html \
   --retries 2
 ```
 
-This command does not write an output file.
+该命令不会写入新的书签 HTML 文件。
 
 ### `marksweep clean <input>`
 
-Checks bookmarks, deduplicates them, removes clearly broken links, keeps suspicious links, and writes a new HTML file.
+检测书签、去重、删除明确无效链接、保留可疑链接，并输出新的 HTML 文件。
 
 ```bash
 marksweep clean bookmarks.html --output bookmarks.cleaned.html
 ```
 
-Suspicious bookmarks are moved to `其他`.
+可疑书签会被移动到 `其他` 目录。
 
 ### `marksweep classify <input>`
 
-Deduplicates bookmarks, asks an OpenAI-compatible model to create a new multi-level folder tree, and writes a new HTML file.
+去重并检测书签，然后将有效书签交给 OpenAI 兼容模型生成新的多层目录。
 
 ```bash
 marksweep classify bookmarks.html \
@@ -129,42 +130,42 @@ marksweep classify bookmarks.html \
   --lang zh
 ```
 
-The original folder structure is not preserved. The AI creates a new structure from bookmark titles and URLs.
+该命令不保留原始目录结构。MarkSweep 会先检测链接，只把有效书签发送给 AI；可疑书签和非网页协议书签会保留在 `其他` 目录；明确无效书签不会进入输出文件。
 
-## Options
+## 参数
 
-### Detection Options
-
-```txt
---concurrency <number>  Number of concurrent URL checks. Default: 20
---timeout <ms>          Timeout per request in milliseconds. Default: 10000
---retries <number>      Retry count after failures. Default: 2
-```
-
-### Output Options
+### 检测参数
 
 ```txt
--o, --output <path>     Output HTML path for clean/classify.
+--concurrency <number>  并发检测数量，默认 20
+--timeout <ms>          单个 URL 检测超时时间，默认 10000 ms
+--retries <number>      失败后的重试次数，默认 2
 ```
 
-The output path cannot be the same as the input path.
-
-### AI Options
+### 输出参数
 
 ```txt
---base-url <url>        OpenAI-compatible API base URL.
---model <name>          Model name.
---api-key <key>         API key.
---lang <language>       Folder language. Default: zh
+-o, --output <path>     clean/classify 的输出 HTML 路径
 ```
 
-AI configuration priority:
+输出路径不能与输入路径相同。
+
+### AI 参数
 
 ```txt
-CLI arguments > environment variables > local config > interactive prompt
+--base-url <url>        OpenAI 兼容 API 的 Base URL
+--model <name>          AI 模型名称
+--api-key <key>         AI API Key
+--lang <language>       分类目录语言，默认 zh
 ```
 
-Supported environment variables:
+AI 配置优先级：
+
+```txt
+CLI 参数 > 环境变量 > 本地配置 > 交互式输入
+```
+
+支持的环境变量：
 
 ```txt
 MARKSWEEP_AI_BASE_URL
@@ -176,9 +177,9 @@ OPENAI_API_KEY
 MARKSWEEP_LANG
 ```
 
-When AI values are entered interactively, MarkSweep asks whether to save them locally for future runs. If you confirm, `baseUrl`, `model`, `apiKey`, and `lang` are saved in a local JSON config file. The API key is stored on your machine in plain text.
+如果在交互式输入中填写 AI 配置，MarkSweep 会询问是否保存到本机。确认后，`baseUrl`、`model`、`apiKey` 和 `lang` 会保存到本地 JSON 配置文件。API Key 会以明文保存在本机。
 
-Default config path:
+默认配置路径：
 
 ```txt
 Windows: %APPDATA%\marksweep\config.json
@@ -186,27 +187,27 @@ macOS:   ~/Library/Application Support/marksweep/config.json
 Linux:   ~/.config/marksweep/config.json
 ```
 
-You can override the path with:
+可以通过下面的环境变量覆盖配置路径：
 
 ```txt
 MARKSWEEP_CONFIG_PATH
 ```
 
-### LangSmith Options
+### LangSmith 参数
 
-LangSmith tracing is optional and disabled by default. When enabled, MarkSweep traces the `classify` AI calls and the model/tool steps used by LangChain.
+LangSmith 追踪默认关闭。启用后，MarkSweep 会追踪 `classify` 的 AI 调用，以及 LangChain 的模型和工具步骤。
 
 ```txt
---langsmith                    Enable LangSmith tracing.
---langsmith-api-key <key>      LangSmith API key.
---langsmith-project <name>     LangSmith project. Default: marksweep
---langsmith-endpoint <url>     LangSmith API endpoint.
---langsmith-workspace-id <id>  LangSmith workspace ID.
---langsmith-hide-inputs        Hide trace inputs before sending.
---langsmith-hide-outputs       Hide trace outputs before sending.
+--langsmith                    启用 LangSmith 追踪
+--langsmith-api-key <key>      LangSmith API Key
+--langsmith-project <name>     LangSmith 项目名，默认 marksweep
+--langsmith-endpoint <url>     LangSmith API Endpoint
+--langsmith-workspace-id <id>  LangSmith Workspace ID
+--langsmith-hide-inputs        发送追踪前隐藏输入
+--langsmith-hide-outputs       发送追踪前隐藏输出
 ```
 
-Equivalent environment variables:
+等价环境变量：
 
 ```txt
 LANGSMITH_TRACING=true
@@ -223,7 +224,7 @@ MARKSWEEP_LANGSMITH_HIDE_INPUTS
 MARKSWEEP_LANGSMITH_HIDE_OUTPUTS
 ```
 
-Example:
+示例：
 
 ```bash
 marksweep classify bookmarks.html \
@@ -235,27 +236,27 @@ marksweep classify bookmarks.html \
   --langsmith-project marksweep-dev
 ```
 
-## Link Classification Rules
+## 链接检测规则
 
-MarkSweep removes only links that are clearly broken after retries:
+MarkSweep 只删除重试后仍明确无效的链接：
 
 - HTTP `404`
 - HTTP `410`
-- DNS failures such as `ENOTFOUND`
-- Refused connections such as `ECONNREFUSED`
-- Repeated empty responses, similar to Chrome's `ERR_EMPTY_RESPONSE`
+- DNS 失败，例如 `ENOTFOUND`
+- 连接被拒绝，例如 `ECONNREFUSED`
+- 重复空响应，例如 Chrome 中的 `ERR_EMPTY_RESPONSE`
 
-MarkSweep keeps suspicious links:
+MarkSweep 会保留可疑链接：
 
-- Timeouts
+- 超时
 - HTTP `401`
 - HTTP `403`
 - HTTP `429`
-- SSL/TLS certificate errors
-- Server errors
-- Possible login walls, anti-bot pages, or temporary network problems
+- SSL/TLS 证书错误
+- 服务器错误
+- 疑似登录墙、防爬页面或临时网络问题
 
-Non-web protocols are skipped and kept:
+非网页协议会跳过检测并保留：
 
 ```txt
 chrome://
@@ -266,19 +267,19 @@ file://
 mailto:
 ```
 
-## AI Web Fetching Tool
+## AI 页面抓取工具
 
-The classifier exposes a LangChain tool named `fetch_web_page`.
+分类器会暴露一个名为 `fetch_web_page` 的 LangChain 工具。
 
-The model decides whether to call it. The prompt asks the model to use the tool only when a bookmark title is too vague to classify from title and URL alone.
+模型会自行决定是否调用该工具。提示词要求模型只在书签标题过于模糊、无法仅凭标题和 URL 分类时，才抓取额外页面内容。
 
-The tool tries providers in this order:
+工具会按以下顺序尝试页面内容来源：
 
-1. Firecrawl, when a Firecrawl API key is configured.
-2. Jina Reader.
-3. Plain HTML fetch and text extraction.
+1. 配置了 Firecrawl API Key 时，优先使用 Firecrawl。
+2. 使用 Jina Reader。
+3. 直接抓取普通 HTML 并抽取正文。
 
-Optional environment variables:
+可选环境变量：
 
 ```txt
 MARKSWEEP_FIRECRAWL_API_KEY
@@ -289,48 +290,48 @@ MARKSWEEP_JINA_API_KEY
 JINA_API_KEY
 ```
 
-Firecrawl is useful for JavaScript-heavy pages. Jina Reader also provides LLM-friendly text and can handle many rendered pages. Plain HTML fallback is best for simple SSR/static pages.
+Firecrawl 适合 JavaScript 较重的页面。Jina Reader 可以返回更适合 LLM 阅读的文本，并能处理不少渲染页面。普通 HTML 回退适合 SSR 或静态页面。
 
-## Deduplication
+## 去重规则
 
-`clean` and `classify` deduplicate bookmarks by normalized URL.
+`clean` 和 `classify` 默认按规范化 URL 去重。
 
-Normalization rules:
+规范化规则：
 
-- Protocol and host are case-insensitive.
-- Trailing `/` is removed.
-- Query strings are preserved.
-- Hash fragments are preserved.
+- 协议和域名不区分大小写。
+- 去掉末尾 `/`。
+- 保留 query。
+- 保留 hash。
 
-When duplicates are found, MarkSweep keeps the bookmark with the more informative title and richer metadata.
+发现重复书签时，MarkSweep 会保留标题信息量更高、元数据更丰富的书签。
 
-## Development
+## 开发
 
-Install dependencies:
+安装依赖：
 
 ```bash
 pnpm install
 ```
 
-Run tests:
+运行测试：
 
 ```bash
 pnpm test
 ```
 
-Run TypeScript:
+运行 TypeScript 检查：
 
 ```bash
 pnpm build
 ```
 
-Run ESLint:
+运行 ESLint：
 
 ```bash
 pnpm lint
 ```
 
-Run all important checks before publishing:
+发布前建议运行：
 
 ```bash
 pnpm test
@@ -339,64 +340,64 @@ pnpm lint
 pnpm pack --dry-run
 ```
 
-## Project Structure
+## 项目结构
 
 ```txt
 src/
-  bookmarks/   URL normalization and deduplication
-  checker/     bookmark validity checking
-  classifier/  AI classification and web fetching tool
-  cli/         CLI config and terminal output helpers
-  parser/      browser bookmark HTML parser
-  report/      result grouping helpers
-  writer/      browser-importable bookmark HTML writer
-tests/         Vitest test suite
-docs/          PRD and implementation TODO
+  bookmarks/   URL 规范化与去重
+  checker/     书签有效性检测
+  classifier/  AI 分类与页面抓取工具
+  cli/         CLI 配置与终端输出
+  parser/      浏览器书签 HTML 解析器
+  report/      检测结果分组工具
+  writer/      浏览器可导入的书签 HTML 生成器
+tests/         Vitest 测试
+docs/          PRD 与实现 TODO
 ```
 
-## Testing Status
+## 测试状态
 
-The test suite covers the important behavior paths:
+测试套件覆盖以下关键路径：
 
-- Parser behavior against a real browser bookmark export.
-- URL normalization and deduplication.
-- Link status classification.
-- HTML writer output.
-- AI classification validation.
-- Web page fetching fallback behavior.
-- CLI command registration and clean/classify integration paths.
+- 基于真实浏览器书签导出的解析行为。
+- URL 规范化与去重。
+- 链接状态分类。
+- HTML 输出。
+- AI 分类结果校验。
+- 页面抓取回退行为。
+- CLI 命令注册，以及 `clean` / `classify` 集成路径。
 
-Run:
+运行：
 
 ```bash
 pnpm test
 ```
 
-## Privacy Notes
+## 隐私说明
 
-`check` and `clean` send network requests to bookmark URLs to determine link status.
+`check`、`clean` 和 `classify` 会向书签 URL 发送网络请求，用于判断链接状态。
 
-`classify` sends bookmark titles and URLs to the configured AI provider. When the AI calls `fetch_web_page`, MarkSweep may also send selected URLs to Firecrawl, Jina Reader, or fetch the page directly, depending on your configuration and fallback behavior.
+`classify` 会将有效书签的标题和 URL 发送给配置的 AI 服务。当 AI 调用 `fetch_web_page` 时，MarkSweep 可能会把选中的 URL 发送给 Firecrawl、Jina Reader，或直接抓取页面内容。
 
-If you choose to save interactive AI settings, MarkSweep stores the API key in a local plain-text JSON config file. Keep that file private and avoid placing it inside a repository.
+如果选择保存交互式 AI 配置，MarkSweep 会把 API Key 明文保存在本机 JSON 配置文件中。请保护该文件，不要将其放入代码仓库。
 
-If LangSmith tracing is enabled, classification prompts, outputs, and tool activity may also be sent to LangSmith. Use `--langsmith-hide-inputs` and `--langsmith-hide-outputs` when you want trace metadata without storing bookmark details.
+如果启用 LangSmith 追踪，分类提示词、输出和工具活动也可能发送到 LangSmith。需要追踪元数据但不保存书签内容时，可以使用 `--langsmith-hide-inputs` 和 `--langsmith-hide-outputs`。
 
-Do not run AI classification on bookmarks that contain sensitive URLs unless you are comfortable sending that metadata to your configured providers.
+如果书签包含敏感 URL，请先确认你可以接受这些元数据发送给对应的服务提供方，再运行 AI 分类。
 
-## Roadmap
+## 后续计划
 
-- Optional JSON reports.
-- Batch/chunked AI classification for very large bookmark files.
-- Coverage reporting.
-- More browser import compatibility fixtures.
-- Optional provider-specific integration tests.
+- 可选 JSON 报告。
+- 面向大型书签文件的分批 AI 分类。
+- 测试覆盖率报告。
+- 更多浏览器导入兼容性 fixture。
+- 可选的提供商集成测试。
 
-## Contributing
+## 贡献
 
-Issues and pull requests are welcome.
+欢迎提交 issue 和 pull request。
 
-Use Conventional Commit messages so Release Please can infer versions:
+请使用 Conventional Commit 消息，便于 Release Please 推断版本：
 
 ```txt
 fix: handle empty bookmark titles
@@ -404,11 +405,11 @@ feat: add a new classifier option
 feat!: change the classified HTML format
 ```
 
-CI runs on Node.js 24. Releases are managed by Release Please. Merging the generated release PR updates `package.json`, updates `CHANGELOG.md`, creates a GitHub Release, and then publishes `@boses/marksweep` to npm through Trusted Publishing.
+CI 在 Node.js 24 上运行。版本发布由 Release Please 管理。合并生成的 release PR 后，会更新 `package.json` 和 `CHANGELOG.md`，创建 GitHub Release，并通过 Trusted Publishing 发布 `@boses/marksweep` 到 npm。
 
-Publishing notes live in [docs/PUBLISHING.md](docs/PUBLISHING.md).
+发布说明见 [docs/PUBLISHING.md](docs/PUBLISHING.md)。
 
-For changes that affect behavior, please include tests and run:
+如果变更会影响行为，请补充测试并运行：
 
 ```bash
 pnpm test
@@ -416,6 +417,6 @@ pnpm build
 pnpm lint
 ```
 
-## License
+## 许可证
 
 MIT

@@ -90,7 +90,7 @@ describe("CLI integration", () => {
       },
     );
     const dependencies: CliDependencies = {
-      checkBookmarks: async () => [],
+      checkBookmarks: async (bookmarks) => bookmarks.map((bookmark) => checkResult(bookmark, "valid", "ok", 200)),
       classifyBookmarks,
     };
 
@@ -115,6 +115,83 @@ describe("CLI integration", () => {
     expect(classifyBookmarks).toHaveBeenCalledOnce();
     expect(parsedOutput.folders.map((folder) => folder.title)).toContain("AI分类");
     expect(parsedOutput.bookmarks).toHaveLength(3);
+  });
+
+  it("classify checks bookmarks first and pins suspicious and non-web bookmarks to 其他", async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), "marksweep-classify-check-"));
+    const inputPath = path.join(workspace, "bookmarks.html");
+    const outputPath = path.join(workspace, "classified.html");
+    await writeFile(inputPath, mixedClassificationFixture(), "utf8");
+
+    const classifyBookmarks = vi.fn(
+      async (
+        bookmarks: ExtractedBookmark[],
+        aiConfig: AiConfig,
+        options?: ClassifyBookmarksOptions,
+      ): Promise<BookmarkHtmlDocument> => {
+        void aiConfig;
+        void options;
+
+        return {
+          title: "Bookmarks",
+          folders: [
+            {
+              title: "AI分类",
+              folders: [],
+              bookmarks: bookmarks.map((bookmark) => ({
+                ...bookmark,
+                folderPath: ["AI分类"],
+              })),
+            },
+          ],
+          bookmarks: [],
+        };
+      },
+    );
+    const dependencies: CliDependencies = {
+      checkBookmarks: async (bookmarks) =>
+        bookmarks.map((bookmark) => {
+          if (bookmark.title === "Broken") {
+            return checkResult(bookmark, "broken", "not_found", 404);
+          }
+
+          if (bookmark.title === "Suspicious") {
+            return checkResult(bookmark, "suspicious", "timeout");
+          }
+
+          if (bookmark.title === "Chrome") {
+            return checkResult(bookmark, "skipped", "non_web_url");
+          }
+
+          return checkResult(bookmark, "valid", "ok", 200);
+        }),
+      classifyBookmarks,
+    };
+
+    await createProgram(dependencies).parseAsync([
+      "node",
+      "marksweep",
+      "classify",
+      inputPath,
+      "--output",
+      outputPath,
+      "--base-url",
+      "https://api.example.com/v1",
+      "--model",
+      "demo-model",
+      "--api-key",
+      "sk-test",
+    ]);
+
+    const output = await readFile(outputPath, "utf8");
+    const parsedOutput = parseBookmarkHtml(output);
+    const classifiedBookmarks = classifyBookmarks.mock.calls[0]?.[0] ?? [];
+
+    expect(classifiedBookmarks.map((bookmark) => bookmark.title)).toEqual(["Valid"]);
+    expect(parsedOutput.bookmarks.map((bookmark) => bookmark.title)).toEqual(["Valid", "Suspicious", "Chrome"]);
+    expect(parsedOutput.bookmarks.find((bookmark) => bookmark.title === "Broken")).toBeUndefined();
+    expect(parsedOutput.bookmarks.find((bookmark) => bookmark.title === "Suspicious")?.folderPath).toEqual(["其他"]);
+    expect(parsedOutput.bookmarks.find((bookmark) => bookmark.title === "Chrome")?.folderPath).toEqual(["其他"]);
   });
 
   it("classify can attach LangSmith callbacks to the AI classification run", async () => {
@@ -149,7 +226,7 @@ describe("CLI integration", () => {
       },
     );
     const dependencies: CliDependencies = {
-      checkBookmarks: async () => [],
+      checkBookmarks: async (bookmarks) => bookmarks.map((bookmark) => checkResult(bookmark, "valid", "ok", 200)),
       classifyBookmarks,
     };
 
@@ -194,6 +271,25 @@ function bookmarkFixture(): string {
   });
 }
 
+function mixedClassificationFixture(): string {
+  return renderBookmarkHtml({
+    title: "Bookmarks",
+    folders: [
+      {
+        title: "Root",
+        folders: [],
+        bookmarks: [
+          bookmark("1", "Valid", "https://valid.example.com"),
+          bookmark("2", "Broken", "https://broken.example.com"),
+          bookmark("3", "Suspicious", "https://suspicious.example.com"),
+          bookmark("4", "Chrome", "chrome://settings"),
+        ],
+      },
+    ],
+    bookmarks: [],
+  });
+}
+
 function bookmark(id: string, title: string, url: string): ExtractedBookmark {
   return {
     id,
@@ -204,7 +300,7 @@ function bookmark(id: string, title: string, url: string): ExtractedBookmark {
       href: url,
       add_date: id,
     },
-    isWebUrl: true,
+    isWebUrl: url.startsWith("http"),
   };
 }
 

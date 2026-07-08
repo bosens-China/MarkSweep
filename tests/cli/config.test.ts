@@ -211,7 +211,7 @@ describe("CLI config helpers", () => {
     });
     expect(prompts.confirm).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: expect.stringContaining("API Key 将明文保存"),
+        message: expect.stringContaining("API Key 会以明文保存"),
         default: true,
       }),
     );

@@ -17,7 +17,7 @@ export function printParsedSummary(parsed: ParsedBookmarkHtml, inputFile: Bookma
   console.log(chalk.bold("提取结果"));
   console.log(`  书签总数：${parsed.bookmarks.length}`);
   console.log(`  文件夹数：${parsed.folders.length}`);
-  console.log(`  网页链接：http/https ${webBookmarks.length}`);
+  console.log(`  网页链接（HTTP/HTTPS）：${webBookmarks.length}`);
   console.log(`  非网页协议：${nonWebBookmarks}`);
 
   const topLevelFolders = summarizeTopLevelFolders(parsed);
@@ -34,8 +34,8 @@ export function printDetectionOptions(options: DetectionOptions): void {
   console.log("");
   console.log(chalk.bold("检测参数"));
   console.log(`  并发：${options.concurrency}`);
-  console.log(`  超时：${options.timeout}ms`);
-  console.log(`  重试：${options.retries}`);
+  console.log(`  超时：${options.timeout} ms`);
+  console.log(`  重试次数：${options.retries}`);
 }
 
 export function printDeduplicationSummary(result: DeduplicationResult): void {
@@ -45,7 +45,7 @@ export function printDeduplicationSummary(result: DeduplicationResult): void {
   console.log(chalk.bold("去重结果"));
   console.log(`  保留书签：${result.bookmarks.length}`);
   console.log(`  重复分组：${result.duplicates.length}`);
-  console.log(`  移除重复：${removedCount}`);
+  console.log(`  移除重复项：${removedCount}`);
 }
 
 export function printCheckSummary(summary: BookmarkCheckSummary): void {
@@ -53,11 +53,11 @@ export function printCheckSummary(summary: BookmarkCheckSummary): void {
   console.log(chalk.bold("检测结果"));
   console.log(`  有效：${summary.valid}`);
   console.log(`  明确无效：${summary.broken}`);
-  console.log(`  可疑保留：${summary.suspicious}`);
+  console.log(`  可疑（保留）：${summary.suspicious}`);
   console.log(`  跳过检测：${summary.skipped}`);
 
   if (summary.networkMayBeUnreliable) {
-    console.log(chalk.yellow("  本次检测出现大面积网络类失败，结果可能不可靠。"));
+    console.log(chalk.yellow("  本次检测出现大量网络类失败，结果可能不可靠。"));
   }
 }
 
@@ -75,7 +75,7 @@ export function printCheckResultList(title: string, results: BookmarkCheckResult
   }
 
   if (results.length > limit) {
-    console.log(`  ... 还有 ${results.length - limit} 条`);
+    console.log(`  还有 ${results.length - limit} 条未显示`);
   }
 }
 
@@ -89,7 +89,7 @@ export function printAiConfig(config: AiConfig): void {
   console.log("");
   console.log(chalk.bold("AI 参数"));
   console.log(`  Base URL：${config.baseUrl}`);
-  console.log(`  Model：${config.model}`);
+  console.log(`  模型：${config.model}`);
   console.log(`  API Key：${maskSecret(config.apiKey)}`);
   console.log(`  语言：${config.lang}`);
 }
@@ -99,20 +99,20 @@ export function printLangSmithConfig(config: LangSmithConfig): void {
   console.log(chalk.bold("LangSmith"));
 
   if (!config.enabled) {
-    console.log("  tracing：关闭");
+    console.log("  追踪：关闭");
     return;
   }
 
-  console.log("  tracing：开启");
-  console.log(`  project：${config.project}`);
+  console.log("  追踪：开启");
+  console.log(`  项目：${config.project}`);
   console.log(`  API Key：${maskSecret(config.apiKey)}`);
 
   if (config.endpoint) {
-    console.log(`  endpoint：${config.endpoint}`);
+    console.log(`  Endpoint：${config.endpoint}`);
   }
 
   if (config.workspaceId) {
-    console.log(`  workspace：${config.workspaceId}`);
+    console.log(`  Workspace：${config.workspaceId}`);
   }
 
   console.log(`  隐藏输入：${config.hideInputs ? "是" : "否"}`);

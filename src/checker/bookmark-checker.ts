@@ -35,6 +35,14 @@ const defaultHeaders = {
   "user-agent": "MarkSweep/0.1 (+https://www.npmjs.com/package/@boses/marksweep)",
   accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 };
+const unreliableNetworkReasons: BookmarkCheckReason[] = [
+  "timeout",
+  "network_error",
+  "ssl_error",
+  "dns_not_found",
+  "connection_refused",
+  "empty_response",
+];
 
 export async function checkBookmarks(
   bookmarks: ExtractedBookmark[],
@@ -71,8 +79,7 @@ export async function checkBookmark(
       return headResult;
     }
 
-    const getResult = await requestAndClassify(bookmark, "GET", attempt, options.timeout, fetcher);
-    lastResult = getResult.status === "valid" ? getResult : preferMoreCertainResult(headResult, getResult);
+    lastResult = await requestAndClassify(bookmark, "GET", attempt, options.timeout, fetcher);
 
     if (lastResult.status === "valid" || !isRetryable(lastResult)) {
       return lastResult;
@@ -105,25 +112,12 @@ export function summarizeCheckResults(results: BookmarkCheckResult[]): BookmarkC
   }
 
   const webResults = results.filter((result) => result.status !== "skipped");
-  const transientNetworkFailures = webResults.filter((result) =>
-    ["timeout", "network_error", "ssl_error"].includes(result.reason),
-  );
+  const transientNetworkFailures = webResults.filter((result) => unreliableNetworkReasons.includes(result.reason));
 
   summary.networkMayBeUnreliable =
     webResults.length >= 10 && transientNetworkFailures.length / webResults.length >= 0.6;
 
   return summary;
-}
-
-function preferMoreCertainResult(first: BookmarkCheckResult, second: BookmarkCheckResult): BookmarkCheckResult {
-  const certainty: Record<BookmarkCheckStatus, number> = {
-    valid: 4,
-    broken: 3,
-    suspicious: 2,
-    skipped: 1,
-  };
-
-  return certainty[second.status] >= certainty[first.status] ? second : first;
 }
 
 async function requestAndClassify(
