@@ -9,13 +9,14 @@ import ora from "ora";
 import { dedupeBookmarks } from "./bookmarks/dedupe.js";
 import { checkBookmarks, summarizeCheckResults } from "./checker/bookmark-checker.js";
 import { classifyBookmarks } from "./classifier/bookmark-classifier.js";
+import { createCheckReport, readCheckReportFile, stringifyCheckReport } from "./cli/check-report-file.js";
 import {
   createLangSmithRuntime,
   flushLangSmithRuntime,
   resolveLangSmithConfig,
   type RawLangSmithOptions,
 } from "./observability/langsmith.js";
-import { getBrokenResults, getKeptResults, getSuspiciousResults } from "./report/check-report.js";
+import { getBrokenResults, getSuspiciousResults } from "./report/check-report.js";
 import { parseBookmarkHtml } from "./parser/bookmark-html.js";
 import {
   assertWritableOutputPath,
@@ -30,6 +31,7 @@ import {
 } from "./cli/config.js";
 import {
   printAiConfig,
+  printCheckResultGroupDescriptions,
   printCheckResultList,
   printCheckSummary,
   printDeduplicationSummary,
@@ -38,6 +40,9 @@ import {
   printOutputTarget,
   printParsedSummary,
 } from "./cli/output.js";
+import { createCheckProgressReporter } from "./cli/progress.js";
+import { installAutoProxy } from "./cli/proxy.js";
+import { selectResultsToDelete, type SelectResultsToDelete } from "./cli/selection.js";
 import { createBookmarkHtmlDocument, moveBookmarksToFolder, renderBookmarkHtml } from "./writer/bookmark-html.js";
 import type { BookmarkCheckResult } from "./checker/types.js";
 import type { ExtractedBookmark } from "./parser/bookmark-html.js";
@@ -49,18 +54,28 @@ interface OutputOption {
   output?: string;
 }
 
-type CheckOptions = DetectionOptions;
-type CleanOptions = DetectionOptions & OutputOption;
-type ClassifyOptions = DetectionOptions & RawAiOptions & RawLangSmithOptions & OutputOption;
+interface JsonOption {
+  json?: boolean;
+}
+
+interface CheckReportOption {
+  checkReport?: string;
+}
+
+type CheckOptions = DetectionOptions & JsonOption;
+type CleanOptions = DetectionOptions & OutputOption & CheckReportOption;
+type ClassifyOptions = DetectionOptions & RawAiOptions & RawLangSmithOptions & OutputOption & CheckReportOption;
 
 interface CliDependencies {
   checkBookmarks: typeof checkBookmarks;
   classifyBookmarks: typeof classifyBookmarks;
+  selectResultsToDelete?: SelectResultsToDelete;
 }
 
 const defaultDependencies: CliDependencies = {
   checkBookmarks,
   classifyBookmarks,
+  selectResultsToDelete,
 };
 
 export function createProgram(dependencies: CliDependencies = defaultDependencies): Command {
@@ -80,6 +95,7 @@ export function createProgram(dependencies: CliDependencies = defaultDependencie
     .option("--concurrency <number>", "并发检测数量", parsePositiveInteger, 20)
     .option("--timeout <ms>", "单个 URL 检测超时时间（毫秒）", parsePositiveInteger, 10000)
     .option("--retries <number>", "失败重试次数", parseNonNegativeInteger, 2)
+    .option("--json", "输出 JSON 检测报告，便于 clean/classify 复用")
     .action(async (inputPath: string, options: CheckOptions) => {
       await runCheckCommand(inputPath, options, dependencies);
     });
@@ -92,6 +108,7 @@ export function createProgram(dependencies: CliDependencies = defaultDependencie
     .option("--concurrency <number>", "并发检测数量", parsePositiveInteger, 20)
     .option("--timeout <ms>", "单个 URL 检测超时时间（毫秒）", parsePositiveInteger, 10000)
     .option("--retries <number>", "失败重试次数", parseNonNegativeInteger, 2)
+    .option("--check-report <path>", "复用 marksweep check --json 生成的检测报告")
     .action(async (inputPath: string, options: CleanOptions) => {
       await runCleanCommand(inputPath, options, dependencies);
     });
@@ -104,6 +121,7 @@ export function createProgram(dependencies: CliDependencies = defaultDependencie
     .option("--concurrency <number>", "并发检测数量", parsePositiveInteger, 20)
     .option("--timeout <ms>", "单个 URL 检测超时时间（毫秒）", parsePositiveInteger, 10000)
     .option("--retries <number>", "失败重试次数", parseNonNegativeInteger, 2)
+    .option("--check-report <path>", "复用 marksweep check --json 生成的检测报告")
     .option("--base-url <url>", "OpenAI 兼容 API 的 Base URL")
     .option("--model <name>", "AI 模型名称")
     .option("--api-key <key>", "AI API Key")
@@ -127,12 +145,20 @@ async function runCheckCommand(inputPath: string, options: CheckOptions, depende
   const parsed = parseBookmarkHtml(inputFile.html);
   const deduped = dedupeBookmarks(parsed.bookmarks);
 
+  if (options.json) {
+    const results = await dependencies.checkBookmarks(deduped.bookmarks, options);
+    process.stdout.write(stringifyCheckReport(createCheckReport(inputFile.absolutePath, results)));
+    return;
+  }
+
   printParsedSummary(parsed, inputFile);
   printDeduplicationSummary(deduped);
   printDetectionOptions(options);
 
   const spinner = ora("正在检测书签有效性⋯⋯").start();
-  const results = await dependencies.checkBookmarks(deduped.bookmarks, options);
+  const results = await dependencies.checkBookmarks(deduped.bookmarks, options, {
+    onProgress: createCheckProgressReporter(spinner, "正在检测书签有效性"),
+  });
   spinner.succeed("书签有效性检测完成");
 
   const summary = summarizeCheckResults(results);
@@ -150,24 +176,68 @@ async function runCleanCommand(inputPath: string, options: CleanOptions, depende
   const deduped = dedupeBookmarks(parsed.bookmarks);
   printParsedSummary(parsed, inputFile);
   printDeduplicationSummary(deduped);
-  printDetectionOptions(options);
+  if (!options.checkReport) {
+    printDetectionOptions(options);
+  }
   printOutputTarget(outputPath);
 
-  const spinner = ora("正在检测并清理书签⋯⋯").start();
-  const results = await dependencies.checkBookmarks(deduped.bookmarks, options);
-  const keptBookmarks = getKeptResults(results).map((result) => result.bookmark);
-  const suspiciousBookmarks = getSuspiciousResults(results).map((result) => result.bookmark);
-  const suspiciousIds = new Set(suspiciousBookmarks.map((bookmark) => bookmark.id));
+  let results: BookmarkCheckResult[];
+  if (options.checkReport) {
+    results = await readCheckReportFile(options.checkReport);
+  } else {
+    const spinner = ora("正在检测并清理书签⋯⋯").start();
+    results = await dependencies.checkBookmarks(deduped.bookmarks, options, {
+      onProgress: createCheckProgressReporter(spinner, "正在检测并清理书签"),
+    });
+    spinner.succeed("书签检测完成");
+  }
+
+  const brokenResults = getBrokenResults(results);
+  const suspiciousResults = getSuspiciousResults(results);
+  const selectToDelete = dependencies.selectResultsToDelete ?? selectResultsToDelete;
+  const brokenToDelete = await selectCleanDeletionStage(
+    "第 1 步：选择要删除的明确无效书签（默认全选）",
+    brokenResults,
+    true,
+    selectToDelete,
+  );
+  const suspiciousToDelete = await selectCleanDeletionStage(
+    "第 2 步：选择要删除的可疑书签（默认不选）",
+    suspiciousResults,
+    false,
+    selectToDelete,
+  );
+  const resultsToDelete = [...brokenToDelete, ...suspiciousToDelete];
+  const deletedIds = new Set(resultsToDelete.map((result) => result.bookmark.id));
+  const keptResults = results.filter((result) => !deletedIds.has(result.bookmark.id));
+  const keptBookmarks = keptResults.map((result) => result.bookmark);
+  const suspiciousIds = new Set(
+    keptResults.filter((result) => result.status === "suspicious").map((result) => result.bookmark.id),
+  );
   const outputBookmarks = keptBookmarks.map((bookmark) =>
     suspiciousIds.has(bookmark.id) ? (moveBookmarksToFolder([bookmark], "其他")[0] ?? bookmark) : bookmark,
   );
   const html = renderBookmarkHtml(createBookmarkHtmlDocument(outputBookmarks));
   await writeFile(outputPath, html, "utf8");
-  spinner.succeed("清理后的书签 HTML 已生成");
+  console.log(chalk.green("清理后的书签 HTML 已生成"));
+  printCheckResultList("已删除的书签", resultsToDelete);
+}
 
-  const summary = summarizeCheckResults(results);
-  printCheckSummary(summary);
-  printCheckResultList("已删除的明确无效书签", getBrokenResults(results));
+async function selectCleanDeletionStage(
+  title: string,
+  results: BookmarkCheckResult[],
+  checked: boolean,
+  selectToDelete: SelectResultsToDelete,
+): Promise<BookmarkCheckResult[]> {
+  if (results.length === 0) {
+    return [];
+  }
+
+  printCheckResultGroupDescriptions(title, results);
+  return selectToDelete(results, {
+    message: "选择要从输出文件中删除的书签（空格切换，回车确认）",
+    checked,
+  });
 }
 
 async function runClassifyCommand(
@@ -187,15 +257,24 @@ async function runClassifyCommand(
 
   printParsedSummary(parsed, inputFile);
   printDeduplicationSummary(deduped);
-  printDetectionOptions(options);
+  if (!options.checkReport) {
+    printDetectionOptions(options);
+  }
   printAiConfig(aiConfig);
   printLangSmithConfig(langSmithConfig);
   printOutputTarget(outputPath);
 
   try {
-    const checkSpinner = ora("正在检测待分类书签⋯⋯").start();
-    const results = await dependencies.checkBookmarks(deduped.bookmarks, options);
-    checkSpinner.succeed("待分类书签检测完成");
+    let results: BookmarkCheckResult[];
+    if (options.checkReport) {
+      results = await readCheckReportFile(options.checkReport);
+    } else {
+      const checkSpinner = ora("正在检测待分类书签⋯⋯").start();
+      results = await dependencies.checkBookmarks(deduped.bookmarks, options, {
+        onProgress: createCheckProgressReporter(checkSpinner, "正在检测待分类书签"),
+      });
+      checkSpinner.succeed("待分类书签检测完成");
+    }
 
     const summary = summarizeCheckResults(results);
     const validBookmarks = results.filter((result) => result.status === "valid").map((result) => result.bookmark);
@@ -275,6 +354,8 @@ function isDirectRun(): boolean {
 }
 
 if (isDirectRun()) {
+  installAutoProxy();
+
   createProgram()
     .parseAsync(process.argv)
     .catch((error: unknown) => {

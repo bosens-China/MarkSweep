@@ -18,7 +18,9 @@ export type BookmarkCheckReason =
   | "server_error"
   | "http_error"
   | "network_error"
-  | "non_web_url";
+  | "non_web_url"
+  | "https_upgrade"
+  | "protocol_error";
 
 export interface BookmarkCheckResult {
   bookmark: ExtractedBookmark;

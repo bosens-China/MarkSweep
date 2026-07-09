@@ -10,6 +10,7 @@ temp/
 
 pnpm-lock.yaml
 bookmarks*.html
+tests/fixtures/*.html
 *.cleaned.html
 *.classified.html
 

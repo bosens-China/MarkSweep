@@ -9,6 +9,14 @@ export interface CheckBookmarksOptions {
   retries: number;
 }
 
+export interface CheckBookmarksProgress {
+  bookmark: ExtractedBookmark;
+  result: BookmarkCheckResult;
+  index: number;
+  completed: number;
+  total: number;
+}
+
 export interface FetchLikeResponse {
   status: number;
   url?: string;
@@ -29,6 +37,7 @@ export type FetchLike = (
 
 export interface CheckBookmarksContext {
   fetcher?: FetchLike;
+  onProgress?: (progress: CheckBookmarksProgress) => void;
 }
 
 const defaultHeaders = {
@@ -42,6 +51,7 @@ const unreliableNetworkReasons: BookmarkCheckReason[] = [
   "dns_not_found",
   "connection_refused",
   "empty_response",
+  "protocol_error",
 ];
 
 export async function checkBookmarks(
@@ -51,14 +61,54 @@ export async function checkBookmarks(
 ): Promise<BookmarkCheckResult[]> {
   const limit = pLimit(options.concurrency);
   const fetcher = context.fetcher ?? undiciFetch;
+  let completed = 0;
 
-  return Promise.all(bookmarks.map((bookmark) => limit(() => checkBookmark(bookmark, options, fetcher))));
+  return Promise.all(
+    bookmarks.map((bookmark, index) =>
+      limit(async () => {
+        const result = await checkBookmark(bookmark, options, fetcher);
+        completed += 1;
+        context.onProgress?.({
+          bookmark,
+          result,
+          index,
+          completed,
+          total: bookmarks.length,
+        });
+        return result;
+      }),
+    ),
+  );
 }
 
 export async function checkBookmark(
   bookmark: ExtractedBookmark,
   options: CheckBookmarksOptions,
   fetcher: FetchLike = undiciFetch,
+): Promise<BookmarkCheckResult> {
+  const result = await checkBookmarkUrl(bookmark, options, fetcher);
+  const httpsBookmark = createHttpsBookmark(bookmark);
+
+  if (result.status === "valid" || !httpsBookmark) {
+    return result;
+  }
+
+  const httpsResult = await checkBookmarkUrl(httpsBookmark, options, fetcher);
+
+  if (httpsResult.status !== "valid") {
+    return result;
+  }
+
+  return {
+    ...httpsResult,
+    reason: "https_upgrade",
+  };
+}
+
+async function checkBookmarkUrl(
+  bookmark: ExtractedBookmark,
+  options: CheckBookmarksOptions,
+  fetcher: FetchLike,
 ): Promise<BookmarkCheckResult> {
   if (!bookmark.isWebUrl) {
     return {
@@ -86,15 +136,68 @@ export async function checkBookmark(
     }
   }
 
-  return (
-    lastResult ?? {
+  const fallbackResult =
+    lastResult ??
+    ({
       bookmark,
       status: "suspicious",
       reason: "network_error",
       attempts: maxAttempts,
       error: "No request result was produced.",
-    }
-  );
+    } satisfies BookmarkCheckResult);
+
+  if (fallbackResult.reason !== "timeout") {
+    return fallbackResult;
+  }
+
+  return confirmTimeoutResult(bookmark, options, maxAttempts + 1, fetcher);
+}
+
+function createHttpsBookmark(bookmark: ExtractedBookmark): ExtractedBookmark | undefined {
+  let url: URL;
+
+  try {
+    url = new URL(bookmark.url);
+  } catch {
+    return undefined;
+  }
+
+  if (url.protocol !== "http:") {
+    return undefined;
+  }
+
+  url.protocol = "https:";
+
+  return {
+    ...bookmark,
+    url: url.toString(),
+    attributes: {
+      ...bookmark.attributes,
+      href: url.toString(),
+    },
+  };
+}
+
+async function confirmTimeoutResult(
+  bookmark: ExtractedBookmark,
+  options: CheckBookmarksOptions,
+  attempt: number,
+  fetcher: FetchLike,
+): Promise<BookmarkCheckResult> {
+  const result = await requestAndClassify(bookmark, "GET", attempt, getTimeoutConfirmationMs(options.timeout), fetcher);
+
+  if (result.reason !== "timeout") {
+    return result;
+  }
+
+  return {
+    ...result,
+    status: "broken",
+  };
+}
+
+function getTimeoutConfirmationMs(timeout: number): number {
+  return Math.max(timeout * 2, 10_000);
 }
 
 export function summarizeCheckResults(results: BookmarkCheckResult[]): BookmarkCheckSummary {
@@ -182,6 +285,10 @@ function classifyHttpStatus(
     return { bookmark, status: "suspicious", reason: "rate_limited", method, attempts, httpStatus };
   }
 
+  if (httpStatus === 502) {
+    return { bookmark, status: "broken", reason: "server_error", method, attempts, httpStatus };
+  }
+
   if (httpStatus >= 500) {
     return { bookmark, status: "suspicious", reason: "server_error", method, attempts, httpStatus };
   }
@@ -198,7 +305,12 @@ function classifyRequestError(
   const code = getErrorCode(error);
   const message = getErrorMessage(error);
   const reason = classifyErrorReason(code, message);
-  const status: BookmarkCheckStatus = ["dns_not_found", "connection_refused", "empty_response"].includes(reason)
+  const status: BookmarkCheckStatus = [
+    "dns_not_found",
+    "connection_refused",
+    "empty_response",
+    "protocol_error",
+  ].includes(reason)
     ? "broken"
     : "suspicious";
 
@@ -236,6 +348,10 @@ function classifyErrorReason(code: string | undefined, message: string): Bookmar
     lowerMessage.includes("terminated")
   ) {
     return "empty_response";
+  }
+
+  if (code === "ERR_HTTP2_PROTOCOL_ERROR" || lowerMessage.includes("protocol_error")) {
+    return "protocol_error";
   }
 
   if (

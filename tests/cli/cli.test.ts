@@ -17,5 +17,10 @@ describe("createProgram", () => {
     expect(help).toContain("检测书签并输出新的清理后 HTML 文件");
     expect(help).toContain("调用 AI 智能分类书签");
     expect(classifyHelp).toContain("--langsmith");
+    expect(program.commands.find((command) => command.name() === "check")?.helpInformation()).toContain("--json");
+    expect(program.commands.find((command) => command.name() === "clean")?.helpInformation()).toContain(
+      "--check-report",
+    );
+    expect(classifyHelp).toContain("--check-report");
   });
 });

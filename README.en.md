@@ -1,104 +1,81 @@
 # MarkSweep
 
-Chinese documentation: [README.md](README.md)
+<img src="assets/logo-marksweep.png" alt="MarkSweep logo" width="160" />
 
-MarkSweep is a TypeScript CLI for cleaning broken browser bookmarks and reorganizing bookmarks with AI.
+中文文档: [README.md](README.md)
 
-It works with browser-exported `bookmarks.html` files, keeps the original file untouched, and writes cleaned or AI-classified results to new HTML files that can be imported back into Chrome, Edge, Firefox, and other browsers that support the Netscape bookmark export format.
+MarkSweep is a TypeScript CLI for browser bookmark cleanup. It reads an exported `bookmarks.html`, checks broken links, cleans or classifies bookmarks, and writes a new HTML file.
 
-## Features
+The original file is never modified by default.
 
-- Parse browser-exported `.html` / `.htm` bookmark files.
-- Check bookmark validity with configurable concurrency, timeout, and retries.
-- Remove only clearly broken links, such as `404`, `410`, DNS failures, refused connections, and repeated empty responses.
-- Keep suspicious links, such as timeouts, `401`, `403`, `429`, SSL errors, and possible anti-bot responses.
-- Deduplicate bookmarks using normalized URLs while keeping the more informative title.
-- Generate browser-importable bookmark HTML.
-- Classify bookmarks with an OpenAI-compatible model.
-- Let the AI decide when vague bookmark titles need extra page content.
-- Fetch page content through a LangChain agent tool with Firecrawl, Jina Reader, and plain HTML fallback.
-
-## Safety Model
-
-MarkSweep is conservative by design.
-
-- It never modifies the original bookmark file.
-- `check` only prints a report.
-- `clean` writes a new cleaned HTML file.
-- `classify` writes a new AI-organized HTML file.
-- Suspicious links are kept instead of deleted.
-- AI failures stop the command before writing a partial classified file.
-
-## Requirements
-
-- Node.js `>=20`
-- pnpm for development
-
-## Installation
-
-From npm, after the package is published:
+## Install
 
 ```bash
 npm install -g @boses/marksweep
 ```
 
-For local development:
+Local development:
 
 ```bash
-git clone <repo-url>
-cd MarkSweep
 pnpm install
-pnpm build
-```
-
-Run the local CLI:
-
-```bash
 pnpm dev -- --help
 ```
 
 Run the built CLI:
 
 ```bash
+pnpm build
 node dist/cli.js --help
 ```
 
 ## Quick Start
 
-Export your bookmarks from your browser as an HTML file, then run:
+Check bookmarks:
 
 ```bash
 marksweep check bookmarks.html
 ```
 
-Clean clearly broken bookmarks and write a new file:
+Clean bookmarks:
 
 ```bash
-marksweep clean bookmarks.html --output bookmarks.cleaned.html
+marksweep clean bookmarks.html -o bookmarks.cleaned.html
 ```
 
-Classify bookmarks with AI and write a new file:
+Classify with AI:
 
 ```bash
 marksweep classify bookmarks.html \
   --base-url https://api.openai.com/v1 \
   --model gpt-4.1-mini \
   --api-key "$OPENAI_API_KEY" \
-  --output bookmarks.classified.html
+  -o bookmarks.classified.html
 ```
 
-If `--output` is omitted, MarkSweep writes next to the input file:
+Without `-o, --output`, MarkSweep writes next to the input file:
 
 ```txt
 bookmarks.cleaned.html
 bookmarks.classified.html
 ```
 
+## Reuse A Check Report
+
+Run checks once, then reuse the result:
+
+```bash
+marksweep check bookmarks.html --json > report.json
+marksweep clean bookmarks.html --check-report report.json -o bookmarks.cleaned.html
+marksweep classify bookmarks.html --check-report report.json -o bookmarks.classified.html
+```
+
+This avoids checking every bookmark URL again.
+
 ## Commands
 
-### `marksweep check <input>`
+### `check`
 
-Checks bookmark validity and prints the result in the terminal.
+Checks bookmark validity and prints a terminal report.
 
 ```bash
 marksweep check bookmarks.html \
@@ -107,21 +84,30 @@ marksweep check bookmarks.html \
   --retries 2
 ```
 
-This command does not write an output file.
+Optional:
 
-### `marksweep clean <input>`
-
-Checks bookmarks, deduplicates them, removes clearly broken links, keeps suspicious links, and writes a new HTML file.
-
-```bash
-marksweep clean bookmarks.html --output bookmarks.cleaned.html
+```txt
+--json                  Print a JSON check report
 ```
 
-Suspicious bookmarks are moved to `其他`.
+### `clean`
 
-### `marksweep classify <input>`
+Checks, deduplicates, and writes a cleaned HTML file.
 
-Deduplicates bookmarks, asks an OpenAI-compatible model to create a new multi-level folder tree, and writes a new HTML file.
+```bash
+marksweep clean bookmarks.html -o bookmarks.cleaned.html
+```
+
+Before deletion, MarkSweep asks what to remove:
+
+- Clearly broken links are selected by default.
+- Suspicious links are not selected by default.
+
+Suspicious links that are kept are moved to `其他`.
+
+### `classify`
+
+Checks, deduplicates, and sends only valid bookmarks to the AI.
 
 ```bash
 marksweep classify bookmarks.html \
@@ -131,39 +117,70 @@ marksweep classify bookmarks.html \
   --lang zh
 ```
 
-The original folder structure is not preserved. MarkSweep checks links first, sends valid bookmarks to the AI, and keeps suspicious or non-web bookmarks under `其他`.
+Suspicious and non-web bookmarks are kept under `其他`. Clearly broken links are not written to the output file.
 
-## Options
-
-### Detection Options
+## Common Options
 
 ```txt
---concurrency <number>  Number of concurrent URL checks. Default: 20
---timeout <ms>          Timeout per request in milliseconds. Default: 10000
---retries <number>      Retry count after failures. Default: 2
+--concurrency <number>  Concurrent checks. Default: 20
+--timeout <ms>          Timeout per URL. Default: 10000
+--retries <number>      Retry count. Default: 2
+-o, --output <path>     Output HTML path
+--check-report <path>   Reuse a report from check --json
 ```
 
-### Output Options
+The output path cannot equal the input path.
+
+## Check Rules
+
+MarkSweep tries `HEAD` first and falls back to `GET` when needed. If `http://` fails, it also tries the matching `https://` URL.
+
+Clearly broken:
+
+- HTTP `404`, `410`
+- HTTP `502`
+- DNS failures, refused connections
+- Empty responses, HTTP/2 protocol errors
+- Timeouts confirmed by an extended retry
+
+Suspicious:
+
+- HTTP `401`, `403`, `429`
+- Most `5xx`
+- SSL/TLS errors
+- Temporary network errors
+
+Non-web protocols are skipped and kept, for example:
 
 ```txt
--o, --output <path>     Output HTML path for clean/classify.
+chrome://
+edge://
+about:
+javascript:
+file://
+mailto:
 ```
 
-The output path cannot be the same as the input path.
+## Proxy
 
-### AI Options
+MarkSweep uses proxies automatically:
+
+- `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and lowercase variants are used first.
+- On macOS, if proxy environment variables are not set, static system proxy settings are read.
+
+## AI Config
 
 ```txt
---base-url <url>        OpenAI-compatible API base URL.
---model <name>          Model name.
---api-key <key>         API key.
+--base-url <url>        OpenAI-compatible API base URL
+--model <name>          Model name
+--api-key <key>         API key
 --lang <language>       Folder language. Default: zh
 ```
 
-AI configuration priority:
+Config priority:
 
 ```txt
-CLI arguments > environment variables > local config > interactive prompt
+CLI options > environment variables > local config > interactive prompt
 ```
 
 Supported environment variables:
@@ -178,9 +195,9 @@ OPENAI_API_KEY
 MARKSWEEP_LANG
 ```
 
-When AI values are entered interactively, MarkSweep asks whether to save them locally for future runs. If you confirm, `baseUrl`, `model`, `apiKey`, and `lang` are saved in a local JSON config file. The API key is stored on your machine in plain text.
+Interactive AI config can be saved locally. The API key is stored as plain text in a local JSON file.
 
-Default config path:
+Default paths:
 
 ```txt
 Windows: %APPDATA%\marksweep\config.json
@@ -188,97 +205,11 @@ macOS:   ~/Library/Application Support/marksweep/config.json
 Linux:   ~/.config/marksweep/config.json
 ```
 
-You can override the path with:
+Override with `MARKSWEEP_CONFIG_PATH`.
 
-```txt
-MARKSWEEP_CONFIG_PATH
-```
+## Page Fetching
 
-### LangSmith Options
-
-LangSmith tracing is optional and disabled by default. When enabled, MarkSweep traces the `classify` AI calls and the model/tool steps used by LangChain.
-
-```txt
---langsmith                    Enable LangSmith tracing.
---langsmith-api-key <key>      LangSmith API key.
---langsmith-project <name>     LangSmith project. Default: marksweep
---langsmith-endpoint <url>     LangSmith API endpoint.
---langsmith-workspace-id <id>  LangSmith workspace ID.
---langsmith-hide-inputs        Hide trace inputs before sending.
---langsmith-hide-outputs       Hide trace outputs before sending.
-```
-
-Equivalent environment variables:
-
-```txt
-LANGSMITH_TRACING=true
-LANGSMITH_API_KEY
-LANGSMITH_PROJECT
-LANGSMITH_ENDPOINT
-LANGSMITH_WORKSPACE_ID
-MARKSWEEP_LANGSMITH_TRACING
-MARKSWEEP_LANGSMITH_API_KEY
-MARKSWEEP_LANGSMITH_PROJECT
-MARKSWEEP_LANGSMITH_ENDPOINT
-MARKSWEEP_LANGSMITH_WORKSPACE_ID
-MARKSWEEP_LANGSMITH_HIDE_INPUTS
-MARKSWEEP_LANGSMITH_HIDE_OUTPUTS
-```
-
-Example:
-
-```bash
-marksweep classify bookmarks.html \
-  --base-url https://api.openai.com/v1 \
-  --model gpt-4.1-mini \
-  --api-key "$OPENAI_API_KEY" \
-  --langsmith \
-  --langsmith-api-key "$LANGSMITH_API_KEY" \
-  --langsmith-project marksweep-dev
-```
-
-## Link Classification Rules
-
-MarkSweep removes only links that are clearly broken after retries:
-
-- HTTP `404`
-- HTTP `410`
-- DNS failures such as `ENOTFOUND`
-- Refused connections such as `ECONNREFUSED`
-- Repeated empty responses, similar to Chrome's `ERR_EMPTY_RESPONSE`
-
-MarkSweep keeps suspicious links:
-
-- Timeouts
-- HTTP `401`
-- HTTP `403`
-- HTTP `429`
-- SSL/TLS certificate errors
-- Server errors
-- Possible login walls, anti-bot pages, or temporary network problems
-
-Non-web protocols are skipped and kept:
-
-```txt
-chrome://
-edge://
-about:
-javascript:
-file://
-mailto:
-```
-
-## AI Web Fetching Tool
-
-The classifier exposes a LangChain tool named `fetch_web_page`.
-
-The model decides whether to call it. The prompt asks the model to use the tool only when a bookmark title is too vague to classify from title and URL alone.
-
-The tool tries providers in this order:
-
-1. Firecrawl, when a Firecrawl API key is configured.
-2. Jina Reader.
-3. Plain HTML fetch and text extraction.
+During AI classification, the model fetches page content only when title and URL are not enough for classification.
 
 Optional environment variables:
 
@@ -291,132 +222,27 @@ MARKSWEEP_JINA_API_KEY
 JINA_API_KEY
 ```
 
-Firecrawl is useful for JavaScript-heavy pages. Jina Reader also provides LLM-friendly text and can handle many rendered pages. Plain HTML fallback is best for simple SSR/static pages.
-
-## Deduplication
-
-`clean` and `classify` deduplicate bookmarks by normalized URL.
-
-Normalization rules:
-
-- Protocol and host are case-insensitive.
-- Trailing `/` is removed.
-- Query strings are preserved.
-- Hash fragments are preserved.
-
-When duplicates are found, MarkSweep keeps the bookmark with the more informative title and richer metadata.
-
-## Development
-
-Install dependencies:
-
-```bash
-pnpm install
-```
-
-Run tests:
-
-```bash
-pnpm test
-```
-
-Run TypeScript:
-
-```bash
-pnpm build
-```
-
-Run ESLint:
-
-```bash
-pnpm lint
-```
-
-Run all important checks before publishing:
-
-```bash
-pnpm test
-pnpm build
-pnpm lint
-pnpm pack --dry-run
-```
-
-## Project Structure
+## LangSmith
 
 ```txt
-src/
-  bookmarks/   URL normalization and deduplication
-  checker/     bookmark validity checking
-  classifier/  AI classification and web fetching tool
-  cli/         CLI config and terminal output helpers
-  parser/      browser bookmark HTML parser
-  report/      result grouping helpers
-  writer/      browser-importable bookmark HTML writer
-tests/         Vitest test suite
-docs/          PRD and implementation TODO
+--langsmith
+--langsmith-api-key <key>
+--langsmith-project <name>
+--langsmith-endpoint <url>
+--langsmith-workspace-id <id>
+--langsmith-hide-inputs
+--langsmith-hide-outputs
 ```
 
-## Testing Status
+LangSmith is disabled by default.
 
-The test suite covers the important behavior paths:
+## Privacy
 
-- Parser behavior against a real browser bookmark export.
-- URL normalization and deduplication.
-- Link status classification.
-- HTML writer output.
-- AI classification validation.
-- Web page fetching fallback behavior.
-- CLI command registration and clean/classify integration paths.
+`check`, `clean`, and `classify` send requests to bookmark URLs.
 
-Run:
+`classify` sends valid bookmark titles and URLs to the configured AI provider. Page fetching may use Firecrawl, Jina Reader, or direct requests.
 
-```bash
-pnpm test
-```
-
-## Privacy Notes
-
-`check`, `clean`, and `classify` send network requests to bookmark URLs to determine link status.
-
-`classify` sends valid bookmark titles and URLs to the configured AI provider. When the AI calls `fetch_web_page`, MarkSweep may also send selected URLs to Firecrawl, Jina Reader, or fetch the page directly, depending on your configuration and fallback behavior.
-
-If you choose to save interactive AI settings, MarkSweep stores the API key in a local plain-text JSON config file. Keep that file private and avoid placing it inside a repository.
-
-If LangSmith tracing is enabled, classification prompts, outputs, and tool activity may also be sent to LangSmith. Use `--langsmith-hide-inputs` and `--langsmith-hide-outputs` when you want trace metadata without storing bookmark details.
-
-Do not run AI classification on bookmarks that contain sensitive URLs unless you are comfortable sending that metadata to your configured providers.
-
-## Roadmap
-
-- Optional JSON reports.
-- Batch/chunked AI classification for very large bookmark files.
-- Coverage reporting.
-- More browser import compatibility fixtures.
-- Optional provider-specific integration tests.
-
-## Contributing
-
-Issues and pull requests are welcome.
-
-Use Conventional Commit messages so Release Please can infer versions:
-
-```txt
-fix: handle empty bookmark titles
-feat: add a new classifier option
-feat!: change the classified HTML format
-```
-
-CI runs on Node.js 24. Releases are managed by Release Please. Merging the generated release PR updates `package.json`, updates `CHANGELOG.md`, creates a GitHub Release, and then publishes `@boses/marksweep` to npm through Trusted Publishing.
-
-Publishing notes live in [docs/PUBLISHING.md](docs/PUBLISHING.md).
-
-For changes that affect behavior, please include tests and run:
-
-```bash
-pnpm test
-pnpm build
-pnpm lint
-```
+When LangSmith is enabled, prompts, outputs, and tool calls may also be sent to LangSmith. Use `--langsmith-hide-inputs` and `--langsmith-hide-outputs` to hide inputs and outputs.
 
 ## License
 

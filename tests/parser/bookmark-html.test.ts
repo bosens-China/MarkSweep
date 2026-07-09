@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isWebUrl, parseBookmarkHtml } from "../../src/parser/bookmark-html";
 
-const samplePath = fileURLToPath(new URL("../../bookmarks_2026_7_8.html", import.meta.url));
+const samplePath = fileURLToPath(new URL("../fixtures/browser-bookmark-export.html", import.meta.url));
 const sampleHtml = readFileSync(samplePath, "utf8");
 
 describe("parseBookmarkHtml", () => {
@@ -11,8 +11,8 @@ describe("parseBookmarkHtml", () => {
     const parsed = parseBookmarkHtml(sampleHtml);
 
     expect(parsed.rootTitle).toBe("Bookmarks");
-    expect(parsed.bookmarks).toHaveLength(227);
-    expect(parsed.folders).toHaveLength(21);
+    expect(parsed.bookmarks).toHaveLength(3);
+    expect(parsed.folders).toHaveLength(4);
   });
 
   it("extracts basic bookmark fields and original attributes", () => {

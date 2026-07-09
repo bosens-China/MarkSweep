@@ -30,6 +30,9 @@ describe("CLI integration", () => {
     const outputPath = path.join(workspace, "cleaned.html");
     await writeFile(inputPath, bookmarkFixture(), "utf8");
 
+    const selectResultsToDelete = vi.fn(async (candidates: BookmarkCheckResult[]) =>
+      candidates.filter((candidate) => candidate.bookmark.title === "Broken"),
+    );
     const dependencies: CliDependencies = {
       checkBookmarks: async (bookmarks) =>
         bookmarks.map((bookmark) => {
@@ -44,6 +47,7 @@ describe("CLI integration", () => {
           return checkResult(bookmark, "valid", "ok", 200);
         }),
       classifyBookmarks: async () => emptyDocument(),
+      selectResultsToDelete,
     };
 
     await createProgram(dependencies).parseAsync(["node", "marksweep", "clean", inputPath, "--output", outputPath]);
@@ -56,6 +60,47 @@ describe("CLI integration", () => {
     expect(parsedOutput.bookmarks.map((bookmark) => bookmark.title)).toEqual(["Valid", "Suspicious"]);
     expect(parsedOutput.bookmarks.find((bookmark) => bookmark.title === "Suspicious")?.folderPath).toEqual(["其他"]);
     expect(output).not.toContain("Broken");
+    expect(selectResultsToDelete).toHaveBeenCalledTimes(2);
+    expect(selectResultsToDelete.mock.calls[0]?.[0].map((candidate) => candidate.bookmark.title)).toEqual(["Broken"]);
+    expect(selectResultsToDelete.mock.calls[0]?.[1]).toMatchObject({ checked: true });
+    expect(selectResultsToDelete.mock.calls[1]?.[0].map((candidate) => candidate.bookmark.title)).toEqual([
+      "Suspicious",
+    ]);
+    expect(selectResultsToDelete.mock.calls[1]?.[1]).toMatchObject({ checked: false });
+  });
+
+  it("clean keeps unchecked broken bookmarks and deletes selected suspicious bookmarks", async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), "marksweep-clean-select-"));
+    const inputPath = path.join(workspace, "bookmarks.html");
+    const outputPath = path.join(workspace, "cleaned.html");
+    await writeFile(inputPath, bookmarkFixture(), "utf8");
+
+    const dependencies: CliDependencies = {
+      checkBookmarks: async (bookmarks) =>
+        bookmarks.map((bookmark) => {
+          if (bookmark.title === "Broken") {
+            return checkResult(bookmark, "broken", "not_found", 404);
+          }
+
+          if (bookmark.title === "Suspicious") {
+            return checkResult(bookmark, "suspicious", "timeout");
+          }
+
+          return checkResult(bookmark, "valid", "ok", 200);
+        }),
+      classifyBookmarks: async () => emptyDocument(),
+      selectResultsToDelete: async (candidates) =>
+        candidates.filter((candidate) => candidate.bookmark.title === "Suspicious"),
+    };
+
+    await createProgram(dependencies).parseAsync(["node", "marksweep", "clean", inputPath, "--output", outputPath]);
+
+    const output = await readFile(outputPath, "utf8");
+    const parsedOutput = parseBookmarkHtml(output);
+
+    expect(parsedOutput.bookmarks.map((bookmark) => bookmark.title)).toEqual(["Valid", "Broken"]);
+    expect(parsedOutput.bookmarks.find((bookmark) => bookmark.title === "Broken")?.folderPath).toEqual(["Root"]);
+    expect(output).not.toContain("Suspicious");
   });
 
   it("classify writes AI-classified HTML without calling a real AI provider", async () => {

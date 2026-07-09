@@ -51,31 +51,52 @@ export function printDeduplicationSummary(result: DeduplicationResult): void {
 export function printCheckSummary(summary: BookmarkCheckSummary): void {
   console.log("");
   console.log(chalk.bold("检测结果"));
-  console.log(`  有效：${summary.valid}`);
-  console.log(`  明确无效：${summary.broken}`);
-  console.log(`  可疑（保留）：${summary.suspicious}`);
-  console.log(`  跳过检测：${summary.skipped}`);
+  console.log(`  ${chalk.green("有效")}：${summary.valid}`);
+  console.log(`  ${chalk.red("明确无效")}：${summary.broken}`);
+  console.log(`  ${chalk.yellow("可疑（保留）")}：${summary.suspicious}`);
+  console.log(`  ${chalk.gray("跳过检测")}：${summary.skipped}`);
 
   if (summary.networkMayBeUnreliable) {
     console.log(chalk.yellow("  本次检测出现大量网络类失败，结果可能不可靠。"));
   }
 }
 
-export function printCheckResultList(title: string, results: BookmarkCheckResult[], limit = 20): void {
+export function printCheckResultList(title: string, results: BookmarkCheckResult[]): void {
   if (results.length === 0) {
     return;
   }
 
   console.log("");
-  console.log(chalk.bold(title));
+  console.log(chalk.bold(colorByStatus(results[0]?.status, title)));
 
-  for (const result of results.slice(0, limit)) {
-    const status = result.httpStatus ? `HTTP ${result.httpStatus}` : result.reason;
-    console.log(`  - ${result.bookmark.title} <${result.bookmark.url}> (${status})`);
+  for (const [key, group] of groupCheckResults(results)) {
+    const description = describeResultGroup(group[0]);
+    console.log(`  ${colorByStatus(group[0]?.status, key)}：${group.length} 条`);
+    if (description) {
+      console.log(`    ${description}`);
+    }
+    console.log("");
+
+    for (const result of group) {
+      console.log(`    - ${result.bookmark.title}  ${result.bookmark.url}`);
+    }
+  }
+}
+
+export function printCheckResultGroupDescriptions(title: string, results: BookmarkCheckResult[]): void {
+  if (results.length === 0) {
+    return;
   }
 
-  if (results.length > limit) {
-    console.log(`  还有 ${results.length - limit} 条未显示`);
+  console.log("");
+  console.log(chalk.bold(colorByStatus(results[0]?.status, title)));
+
+  for (const [key, group] of groupCheckResults(results)) {
+    const description = describeResultGroup(group[0]);
+    console.log(`  ${colorByStatus(group[0]?.status, key)}：${group.length} 条`);
+    if (description) {
+      console.log(`    ${description}`);
+    }
   }
 }
 
@@ -133,4 +154,83 @@ function summarizeTopLevelFolders(parsed: ParsedBookmarkHtml): Array<[string, nu
   }
 
   return [...counts.entries()].sort((first, second) => second[1] - first[1]);
+}
+
+function groupCheckResults(results: BookmarkCheckResult[]): Array<[string, BookmarkCheckResult[]]> {
+  const groups = new Map<string, BookmarkCheckResult[]>();
+
+  for (const result of results) {
+    const key = result.httpStatus ? `HTTP ${result.httpStatus}` : result.reason;
+    const group = groups.get(key) ?? [];
+    group.push(result);
+    groups.set(key, group);
+  }
+
+  return [...groups.entries()];
+}
+
+function describeResultGroup(result: BookmarkCheckResult | undefined): string {
+  if (!result) {
+    return "";
+  }
+
+  if (result.httpStatus === 401) {
+    return "需要认证或登录，当前检测请求没有有效登录态。";
+  }
+
+  if (result.httpStatus === 403) {
+    return "服务器拒绝访问，可能需要权限、登录态，或触发了防爬。";
+  }
+
+  if (result.httpStatus === 404) {
+    return "服务器明确表示这个具体页面不存在。";
+  }
+
+  if (result.httpStatus === 410) {
+    return "服务器明确表示这个页面已永久移除。";
+  }
+
+  if (result.httpStatus === 429) {
+    return "请求过多被限流，稍后或用浏览器访问可能不同。";
+  }
+
+  if (result.httpStatus === 502) {
+    return "网关收到上游错误，浏览器通常也会显示无法正常运作。";
+  }
+
+  switch (result.reason) {
+    case "dns_not_found":
+      return "域名无法解析。";
+    case "connection_refused":
+      return "目标服务器拒绝连接。";
+    case "empty_response":
+      return "连接被提前关闭，浏览器常见为 ERR_CONNECTION_CLOSED。";
+    case "timeout":
+      return "加长超时确认后仍无响应。";
+    case "protocol_error":
+      return "HTTP 协议协商失败，浏览器常见为 ERR_HTTP2_PROTOCOL_ERROR。";
+    case "ssl_error":
+      return "证书或 TLS 校验失败。";
+    case "non_web_url":
+      return "非 HTTP/HTTPS 协议，已跳过网络检测。";
+    case "https_upgrade":
+      return "原 HTTP 地址失败，但 HTTPS 地址可访问。";
+    default:
+      return "";
+  }
+}
+
+function colorByStatus(status: BookmarkCheckResult["status"] | undefined, text: string): string {
+  switch (status) {
+    case "valid":
+      return chalk.green(text);
+    case "broken":
+      return chalk.red(text);
+    case "suspicious":
+      return chalk.yellow(text);
+    case "skipped":
+      return chalk.gray(text);
+    default:
+      return text;
+  }
 }

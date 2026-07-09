@@ -3,6 +3,7 @@ import {
   checkBookmark,
   checkBookmarks,
   summarizeCheckResults,
+  type CheckBookmarksProgress,
   type FetchLike,
 } from "../../src/checker/bookmark-checker";
 import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
@@ -68,9 +69,48 @@ describe("checkBookmark", () => {
       status: "broken",
       reason: "gone",
     });
+
+    await expect(
+      checkBookmark(createBookmark("https://bad-gateway.test"), defaultOptions(), fetchStatus(502)),
+    ).resolves.toMatchObject({
+      status: "broken",
+      reason: "server_error",
+      httpStatus: 502,
+    });
   });
 
-  it("keeps auth, forbidden, rate limit, and timeout as suspicious", async () => {
+  it("tries the HTTPS URL before treating an HTTP bookmark as broken", async () => {
+    const fetcher: FetchLike = async (url) => ({
+      status: url.startsWith("https://") ? 200 : 404,
+    });
+
+    await expect(
+      checkBookmark(createBookmark("http://legacy.example.com/#/docs"), defaultOptions(), fetcher),
+    ).resolves.toMatchObject({
+      status: "valid",
+      reason: "https_upgrade",
+      bookmark: {
+        url: "https://legacy.example.com/#/docs",
+        attributes: {
+          href: "https://legacy.example.com/#/docs",
+        },
+      },
+    });
+  });
+
+  it("keeps the original HTTP failure when HTTPS also fails", async () => {
+    await expect(
+      checkBookmark(createBookmark("http://missing.example.com/page"), defaultOptions(), fetchStatus(404)),
+    ).resolves.toMatchObject({
+      status: "broken",
+      reason: "not_found",
+      bookmark: {
+        url: "http://missing.example.com/page",
+      },
+    });
+  });
+
+  it("keeps auth, forbidden, and rate limit as suspicious", async () => {
     await expect(
       checkBookmark(createBookmark("https://auth.test"), defaultOptions(), fetchStatus(401)),
     ).resolves.toMatchObject({
@@ -91,16 +131,45 @@ describe("checkBookmark", () => {
       status: "suspicious",
       reason: "rate_limited",
     });
+  });
+
+  it("uses one extended confirmation retry before deleting a timed out bookmark", async () => {
+    const requestedMethods: Array<"HEAD" | "GET"> = [];
+    const fetcher: FetchLike = async (_url, init) => {
+      requestedMethods.push(init.method);
+
+      if (requestedMethods.length < 3) {
+        const error = new Error("This operation was aborted") as Error & { code?: string };
+        error.code = "AbortError";
+        throw error;
+      }
+
+      return { status: 200 };
+    };
 
     await expect(
+      checkBookmark(createBookmark("https://slow-then-ok.test"), defaultOptions(), fetcher),
+    ).resolves.toMatchObject({
+      status: "valid",
+      reason: "ok",
+      method: "GET",
+      attempts: 2,
+    });
+    expect(requestedMethods).toEqual(["HEAD", "GET", "GET"]);
+  });
+
+  it("classifies a bookmark as broken when the extended timeout retry also times out", async () => {
+    await expect(
       checkBookmark(
-        createBookmark("https://slow.test"),
+        createBookmark("https://always-slow.test"),
         defaultOptions(),
         throwingFetcher("AbortError", "This operation was aborted"),
       ),
     ).resolves.toMatchObject({
-      status: "suspicious",
+      status: "broken",
       reason: "timeout",
+      method: "GET",
+      attempts: 2,
     });
   });
 
@@ -136,6 +205,17 @@ describe("checkBookmark", () => {
     ).resolves.toMatchObject({
       status: "broken",
       reason: "empty_response",
+    });
+
+    await expect(
+      checkBookmark(
+        createBookmark("https://protocol.test"),
+        defaultOptions(),
+        throwingFetcher("ERR_HTTP2_PROTOCOL_ERROR", "HTTP/2 stream was not closed cleanly: PROTOCOL_ERROR"),
+      ),
+    ).resolves.toMatchObject({
+      status: "broken",
+      reason: "protocol_error",
     });
   });
 
@@ -174,6 +254,31 @@ describe("checkBookmarks", () => {
       skipped: 1,
       networkMayBeUnreliable: false,
     });
+  });
+
+  it("reports progress as each bookmark is checked", async () => {
+    const progress: CheckBookmarksProgress[] = [];
+
+    await checkBookmarks(
+      [
+        createBookmark("https://first.test"),
+        createBookmark("https://second.test"),
+        createBookmark("chrome://settings", false),
+      ],
+      defaultOptions(),
+      {
+        fetcher: fetchStatus(200),
+        onProgress: (item) => progress.push(item),
+      },
+    );
+
+    expect(progress.map((item) => item.completed)).toEqual([1, 2, 3]);
+    expect(progress.map((item) => item.total)).toEqual([3, 3, 3]);
+    expect(progress.map((item) => item.bookmark.url)).toEqual([
+      "https://first.test",
+      "https://second.test",
+      "chrome://settings",
+    ]);
   });
 
   it("marks a batch as unreliable when most web checks are transient network failures", () => {
