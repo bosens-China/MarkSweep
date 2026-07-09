@@ -52,6 +52,18 @@ marksweep classify bookmarks.html \
   -o bookmarks.classified.html
 ```
 
+Windows PowerShell：
+
+```powershell
+marksweep classify bookmarks.html `
+  --base-url https://api.openai.com/v1 `
+  --model gpt-4.1-mini `
+  --api-key $env:OPENAI_API_KEY `
+  -o bookmarks.classified.html
+```
+
+PowerShell 多行命令使用反引号 `` ` ``，不要使用 Bash 的 `\`。
+
 不指定 `-o, --output` 时，会在输入文件旁生成：
 
 ```txt
@@ -59,17 +71,16 @@ bookmarks.cleaned.html
 bookmarks.classified.html
 ```
 
-## 复用检测报告
+## 组合使用
 
-先检测一次，再复用结果执行清理或分类：
+如果想先删除坏链再分类，先清理，再把清理后的文件交给 AI 分类：
 
 ```bash
-marksweep check bookmarks.html --json > report.json
-marksweep clean bookmarks.html --check-report report.json -o bookmarks.cleaned.html
-marksweep classify bookmarks.html --check-report report.json -o bookmarks.classified.html
+marksweep clean bookmarks.html -o bookmarks.cleaned.html
+marksweep classify bookmarks.cleaned.html -o bookmarks.classified.html
 ```
 
-这样可以避免重复请求所有书签 URL。
+`classify` 只负责 AI 分类，不会重复检测书签有效性。
 
 ## 命令
 
@@ -107,7 +118,7 @@ marksweep clean bookmarks.html -o bookmarks.cleaned.html
 
 ### `classify`
 
-检测、去重，然后只把有效书签交给 AI 分类。
+去重，然后把书签交给 AI 分类。
 
 ```bash
 marksweep classify bookmarks.html \
@@ -117,16 +128,16 @@ marksweep classify bookmarks.html \
   --lang zh
 ```
 
-可疑链接和非网页协议会保留在 `其他` 目录。明确无效链接不会进入输出文件。
+如需过滤明确无效链接，先运行 `clean`，再对生成的 HTML 执行 `classify`。
 
 ## 常用参数
 
 ```txt
---concurrency <number>  并发检测数量，默认 20
---timeout <ms>          单个 URL 超时时间，默认 10000
---retries <number>      失败重试次数，默认 2
+--concurrency <number>  check/clean 并发检测数量，默认 20
+--timeout <ms>          check/clean 单个 URL 超时时间，默认 10000
+--retries <number>      check/clean 失败重试次数，默认 2
 -o, --output <path>     输出 HTML 路径
---check-report <path>   复用 check --json 生成的报告
+--check-report <path>   clean 复用 check --json 生成的报告
 ```
 
 输出路径不能与输入路径相同。
@@ -226,23 +237,45 @@ JINA_API_KEY
 
 ```txt
 --langsmith
---langsmith-api-key <key>
---langsmith-project <name>
---langsmith-endpoint <url>
---langsmith-workspace-id <id>
---langsmith-hide-inputs
---langsmith-hide-outputs
 ```
 
-LangSmith 默认关闭。
+LangSmith 默认关闭。启用时需要环境变量：
+
+```bash
+export LANGSMITH_API_KEY="<your-api-key>"
+export LANGSMITH_PROJECT="default"
+```
+
+Windows PowerShell：
+
+```powershell
+$env:LANGSMITH_API_KEY = "<your-api-key>"
+$env:LANGSMITH_PROJECT = "default"
+```
+
+如果设置了上面两个变量，MarkSweep 会自动开启追踪。也可以显式传 `--langsmith` 开启。
+
+可选：
+
+```bash
+export LANGSMITH_TRACING=false
+export LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
+```
+
+Windows PowerShell：
+
+```powershell
+$env:LANGSMITH_TRACING = "false"
+$env:LANGSMITH_ENDPOINT = "https://api.smith.langchain.com"
+```
 
 ## 隐私
 
-`check`、`clean` 和 `classify` 会向书签 URL 发送请求。
+`check` 和 `clean` 会向书签 URL 发送有效性检测请求。
 
-`classify` 会把有效书签的标题和 URL 发送给配置的 AI 服务。页面抓取可能请求 Firecrawl、Jina Reader，或直接访问目标页面。
+`classify` 会把书签标题和 URL 发送给配置的 AI 服务。页面抓取可能请求 Firecrawl、Jina Reader，或直接访问目标页面。
 
-启用 LangSmith 后，提示词、输出和工具调用也可能发送到 LangSmith。可以用 `--langsmith-hide-inputs` 和 `--langsmith-hide-outputs` 隐藏输入输出。
+启用 LangSmith 后，提示词、输出和工具调用也可能发送到 LangSmith。
 
 ## 许可证
 

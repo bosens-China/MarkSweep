@@ -52,6 +52,18 @@ marksweep classify bookmarks.html \
   -o bookmarks.classified.html
 ```
 
+Windows PowerShell:
+
+```powershell
+marksweep classify bookmarks.html `
+  --base-url https://api.openai.com/v1 `
+  --model gpt-4.1-mini `
+  --api-key $env:OPENAI_API_KEY `
+  -o bookmarks.classified.html
+```
+
+PowerShell uses the backtick `` ` `` for line continuation, not Bash `\`.
+
 Without `-o, --output`, MarkSweep writes next to the input file:
 
 ```txt
@@ -59,17 +71,16 @@ bookmarks.cleaned.html
 bookmarks.classified.html
 ```
 
-## Reuse A Check Report
+## Combine Commands
 
-Run checks once, then reuse the result:
+To remove broken links before classification, clean first and then classify the cleaned file:
 
 ```bash
-marksweep check bookmarks.html --json > report.json
-marksweep clean bookmarks.html --check-report report.json -o bookmarks.cleaned.html
-marksweep classify bookmarks.html --check-report report.json -o bookmarks.classified.html
+marksweep clean bookmarks.html -o bookmarks.cleaned.html
+marksweep classify bookmarks.cleaned.html -o bookmarks.classified.html
 ```
 
-This avoids checking every bookmark URL again.
+`classify` only runs AI classification. It does not re-check bookmark URLs.
 
 ## Commands
 
@@ -107,7 +118,7 @@ Suspicious links that are kept are moved to `其他`.
 
 ### `classify`
 
-Checks, deduplicates, and sends only valid bookmarks to the AI.
+Deduplicates bookmarks and sends them to the AI.
 
 ```bash
 marksweep classify bookmarks.html \
@@ -117,16 +128,16 @@ marksweep classify bookmarks.html \
   --lang zh
 ```
 
-Suspicious and non-web bookmarks are kept under `其他`. Clearly broken links are not written to the output file.
+To filter clearly broken links, run `clean` first and classify the generated HTML.
 
 ## Common Options
 
 ```txt
---concurrency <number>  Concurrent checks. Default: 20
---timeout <ms>          Timeout per URL. Default: 10000
---retries <number>      Retry count. Default: 2
+--concurrency <number>  Concurrent checks for check/clean. Default: 20
+--timeout <ms>          URL timeout for check/clean. Default: 10000
+--retries <number>      Failed request retries for check/clean. Default: 2
 -o, --output <path>     Output HTML path
---check-report <path>   Reuse a report from check --json
+--check-report <path>   Let clean reuse a report from check --json
 ```
 
 The output path cannot equal the input path.
@@ -226,23 +237,45 @@ JINA_API_KEY
 
 ```txt
 --langsmith
---langsmith-api-key <key>
---langsmith-project <name>
---langsmith-endpoint <url>
---langsmith-workspace-id <id>
---langsmith-hide-inputs
---langsmith-hide-outputs
 ```
 
-LangSmith is disabled by default.
+LangSmith is disabled by default. When enabled, it requires:
+
+```bash
+export LANGSMITH_API_KEY="<your-api-key>"
+export LANGSMITH_PROJECT="default"
+```
+
+Windows PowerShell:
+
+```powershell
+$env:LANGSMITH_API_KEY = "<your-api-key>"
+$env:LANGSMITH_PROJECT = "default"
+```
+
+If both variables are set, MarkSweep enables tracing automatically. You can also pass `--langsmith` explicitly.
+
+Optional:
+
+```bash
+export LANGSMITH_TRACING=false
+export LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
+```
+
+Windows PowerShell:
+
+```powershell
+$env:LANGSMITH_TRACING = "false"
+$env:LANGSMITH_ENDPOINT = "https://api.smith.langchain.com"
+```
 
 ## Privacy
 
-`check`, `clean`, and `classify` send requests to bookmark URLs.
+`check` and `clean` send validity-check requests to bookmark URLs.
 
-`classify` sends valid bookmark titles and URLs to the configured AI provider. Page fetching may use Firecrawl, Jina Reader, or direct requests.
+`classify` sends bookmark titles and URLs to the configured AI provider. Page fetching may use Firecrawl, Jina Reader, or direct requests.
 
-When LangSmith is enabled, prompts, outputs, and tool calls may also be sent to LangSmith. Use `--langsmith-hide-inputs` and `--langsmith-hide-outputs` to hide inputs and outputs.
+When LangSmith is enabled, prompts, outputs, and tool calls may also be sent to LangSmith.
 
 ## License
 
