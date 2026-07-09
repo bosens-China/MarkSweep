@@ -4,13 +4,9 @@ import { Client } from "langsmith";
 
 export interface RawLangSmithOptions {
   langsmith?: boolean;
-  langsmithApiKey?: string;
-  langsmithProject?: string;
-  langsmithEndpoint?: string;
-  langsmithWorkspaceId?: string;
-  langsmithHideInputs?: boolean;
-  langsmithHideOutputs?: boolean;
 }
+
+const defaultLangSmithEndpoint = "https://api.smith.langchain.com";
 
 export type LangSmithConfig =
   | {
@@ -20,10 +16,7 @@ export type LangSmithConfig =
       enabled: true;
       apiKey: string;
       project: string;
-      endpoint?: string;
-      workspaceId?: string;
-      hideInputs: boolean;
-      hideOutputs: boolean;
+      endpoint: string;
     };
 
 export interface LangSmithRuntime {
@@ -36,51 +29,28 @@ export function resolveLangSmithConfig(
   rawOptions: RawLangSmithOptions,
   env: NodeJS.ProcessEnv = process.env,
 ): LangSmithConfig {
-  const explicitCliConfig = [
-    rawOptions.langsmith,
-    rawOptions.langsmithApiKey,
-    rawOptions.langsmithProject,
-    rawOptions.langsmithEndpoint,
-    rawOptions.langsmithWorkspaceId,
-    rawOptions.langsmithHideInputs,
-    rawOptions.langsmithHideOutputs,
-  ].some((value) => value !== undefined);
-  const envTracing = firstDefined(
-    parseBooleanEnv("MARKSWEEP_LANGSMITH_TRACING", env.MARKSWEEP_LANGSMITH_TRACING),
-    parseBooleanEnv("LANGSMITH_TRACING", env.LANGSMITH_TRACING),
-  );
-  const enabled = rawOptions.langsmith ?? (explicitCliConfig ? true : envTracing) ?? false;
+  const apiKey = firstNonEmpty(env.LANGSMITH_API_KEY);
+  const project = firstNonEmpty(env.LANGSMITH_PROJECT);
+  const envTracing = parseBooleanEnv("LANGSMITH_TRACING", env.LANGSMITH_TRACING);
+  const enabled = rawOptions.langsmith ?? envTracing ?? Boolean(apiKey && project);
 
   if (!enabled) {
     return { enabled: false };
   }
 
-  const apiKey = firstNonEmpty(rawOptions.langsmithApiKey, env.MARKSWEEP_LANGSMITH_API_KEY, env.LANGSMITH_API_KEY);
   if (!apiKey) {
-    throw new Error(
-      "缺少 LangSmith API Key：请通过 --langsmith-api-key、MARKSWEEP_LANGSMITH_API_KEY 或 LANGSMITH_API_KEY 提供。",
-    );
+    throw new Error("缺少 LangSmith API Key：请通过 LANGSMITH_API_KEY 提供。");
+  }
+
+  if (!project) {
+    throw new Error("缺少 LangSmith Project：请通过 LANGSMITH_PROJECT 提供。");
   }
 
   return {
     enabled: true,
     apiKey,
-    project:
-      firstNonEmpty(rawOptions.langsmithProject, env.MARKSWEEP_LANGSMITH_PROJECT, env.LANGSMITH_PROJECT) ?? "marksweep",
-    endpoint: firstNonEmpty(rawOptions.langsmithEndpoint, env.MARKSWEEP_LANGSMITH_ENDPOINT, env.LANGSMITH_ENDPOINT),
-    workspaceId: firstNonEmpty(
-      rawOptions.langsmithWorkspaceId,
-      env.MARKSWEEP_LANGSMITH_WORKSPACE_ID,
-      env.LANGSMITH_WORKSPACE_ID,
-    ),
-    hideInputs:
-      rawOptions.langsmithHideInputs ??
-      parseBooleanEnv("MARKSWEEP_LANGSMITH_HIDE_INPUTS", env.MARKSWEEP_LANGSMITH_HIDE_INPUTS) ??
-      false,
-    hideOutputs:
-      rawOptions.langsmithHideOutputs ??
-      parseBooleanEnv("MARKSWEEP_LANGSMITH_HIDE_OUTPUTS", env.MARKSWEEP_LANGSMITH_HIDE_OUTPUTS) ??
-      false,
+    project,
+    endpoint: firstNonEmpty(env.LANGSMITH_ENDPOINT) ?? defaultLangSmithEndpoint,
   };
 }
 
@@ -92,9 +62,6 @@ export function createLangSmithRuntime(config: LangSmithConfig, command: string)
   const client = new Client({
     apiKey: config.apiKey,
     apiUrl: config.endpoint,
-    workspaceId: config.workspaceId,
-    hideInputs: config.hideInputs,
-    hideOutputs: config.hideOutputs,
     blockOnRootRunFinalization: true,
   });
   const tracer = new LangChainTracer({
@@ -125,10 +92,6 @@ export async function flushLangSmithRuntime(runtime: LangSmithRuntime | undefine
   } catch (error) {
     return error;
   }
-}
-
-function firstDefined<T>(...values: Array<T | undefined>): T | undefined {
-  return values.find((value): value is T => value !== undefined);
 }
 
 function firstNonEmpty(...values: Array<string | undefined>): string | undefined {

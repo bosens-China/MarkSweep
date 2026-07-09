@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   classificationToHtmlDocument,
   classifyBookmarksWithModel,
+  parseClassificationResult,
   validateClassification,
   type ToolCallingModelLike,
 } from "../../src/classifier/bookmark-classifier";
@@ -11,17 +12,17 @@ describe("classification validation", () => {
   it("throws when the AI response misses a bookmark", () => {
     expect(() =>
       validateClassification([bookmark("a"), bookmark("b")], {
-        folders: [{ title: "Dev", bookmarks: ["a"], children: [] }],
+        folders: [{ title: "Dev", bookmarks: ["https://example.com/a"], children: [] }],
       }),
-    ).toThrow("缺失 ID：b");
+    ).toThrow("缺失 URL：https://example.com/b");
   });
 
-  it("throws on duplicate bookmark IDs", () => {
+  it("throws on duplicate bookmark URLs", () => {
     expect(() =>
       validateClassification([bookmark("a")], {
-        folders: [{ title: "Dev", bookmarks: ["a", "a"], children: [] }],
+        folders: [{ title: "Dev", bookmarks: ["https://example.com/a", "https://example.com/a"], children: [] }],
       }),
-    ).toThrow("重复 ID：a");
+    ).toThrow("重复 URL：https://example.com/a");
   });
 
   it("converts classification folders to a renderable document", () => {
@@ -29,8 +30,8 @@ describe("classification validation", () => {
       folders: [
         {
           title: "开发",
-          bookmarks: ["a"],
-          children: [{ title: "文档", bookmarks: ["b"], children: [] }],
+          bookmarks: ["https://example.com/a"],
+          children: [{ title: "文档", bookmarks: ["https://example.com/b"], children: [] }],
         },
       ],
     });
@@ -39,6 +40,24 @@ describe("classification validation", () => {
     expect(document.folders[0]?.bookmarks.map((item) => item.id)).toEqual(["a"]);
     expect(document.folders[0]?.folders[0]?.bookmarks.map((item) => item.id)).toEqual(["b"]);
   });
+
+  it("matches classified bookmarks by normalized URL", () => {
+    const document = classificationToHtmlDocument([bookmark("a", "Title", "https://example.com/a/")], {
+      folders: [{ title: "开发", bookmarks: ["https://example.com/a"], children: [] }],
+    });
+
+    expect(document.folders[0]?.bookmarks.map((item) => item.id)).toEqual(["a"]);
+  });
+
+  it("parses JSON classification returned as model text", () => {
+    expect(
+      parseClassificationResult(
+        '```json\n{"folders":[{"title":"开发","bookmarks":["https://example.com/a"],"children":[]}]}\n```',
+      ),
+    ).toEqual({
+      folders: [{ title: "开发", bookmarks: ["https://example.com/a"], children: [] }],
+    });
+  });
 });
 
 describe("classifyBookmarksWithModel", () => {
@@ -46,12 +65,12 @@ describe("classifyBookmarksWithModel", () => {
     const boundInvoke = vi.fn(async () => ({
       tool_calls: [{ name: "fetch_web_page", args: { url: "https://example.com" } }],
     }));
-    const structuredInvoke = vi.fn(async () => ({
-      folders: [{ title: "其他", bookmarks: ["a"], children: [] }],
-    }));
+    const invoke = vi.fn(
+      async () => '{"folders":[{"title":"其他","bookmarks":["https://example.com"],"children":[]}]}',
+    );
     const model: ToolCallingModelLike = {
+      invoke,
       bindTools: vi.fn(() => ({ invoke: boundInvoke })),
-      withStructuredOutput: vi.fn(() => ({ invoke: structuredInvoke })),
     };
 
     const document = await classifyBookmarksWithModel([bookmark("a", "首页", "https://example.com")], model, {
@@ -66,7 +85,7 @@ describe("classifyBookmarksWithModel", () => {
 
     expect(model.bindTools).toHaveBeenCalled();
     expect(boundInvoke).toHaveBeenCalled();
-    expect(structuredInvoke).toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalled();
     expect(document.folders[0]?.title).toBe("其他");
   });
 
@@ -74,12 +93,12 @@ describe("classifyBookmarksWithModel", () => {
     const boundInvoke = vi.fn(async () => ({
       tool_calls: [{ name: "fetch_web_page", args: { url: "https://example.com" } }],
     }));
-    const structuredInvoke = vi.fn(async () => ({
-      folders: [{ title: "其他", bookmarks: ["a"], children: [] }],
+    const invoke = vi.fn(async () => ({
+      folders: [{ title: "其他", bookmarks: ["https://example.com"], children: [] }],
     }));
     const model: ToolCallingModelLike = {
+      invoke,
       bindTools: vi.fn(() => ({ invoke: boundInvoke })),
-      withStructuredOutput: vi.fn(() => ({ invoke: structuredInvoke })),
     };
 
     const document = await classifyBookmarksWithModel([bookmark("a", "首页", "https://example.com")], model, {
@@ -90,7 +109,7 @@ describe("classifyBookmarksWithModel", () => {
     });
 
     expect(boundInvoke).toHaveBeenCalled();
-    expect(structuredInvoke).toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalled();
     expect(document.folders[0]?.bookmarks.map((item) => item.id)).toEqual(["a"]);
   });
 });

@@ -7,8 +7,6 @@ import { createCheckReport, stringifyCheckReport } from "../../src/cli/check-rep
 import { parseBookmarkHtml } from "../../src/parser/bookmark-html";
 import { renderBookmarkHtml, type BookmarkHtmlDocument } from "../../src/writer/bookmark-html";
 import type { BookmarkCheckResult } from "../../src/checker/types";
-import type { AiConfig } from "../../src/cli/config";
-import type { ClassifyBookmarksOptions } from "../../src/classifier/bookmark-classifier";
 import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
 
 describe("CLI check report flow", () => {
@@ -98,75 +96,6 @@ describe("CLI check report flow", () => {
     expect(parsedOutput.bookmarks.map((bookmark) => bookmark.title)).toEqual(["Valid", "Suspicious"]);
     expect(parsedOutput.bookmarks.find((bookmark) => bookmark.title === "Suspicious")?.folderPath).toEqual(["其他"]);
     expect(output).not.toContain("Broken");
-  });
-
-  it("classify --check-report reuses the report and only classifies valid bookmarks", async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "marksweep-classify-report-"));
-    const inputPath = path.join(workspace, "bookmarks.html");
-    const reportPath = path.join(workspace, "report.json");
-    const outputPath = path.join(workspace, "classified.html");
-    await writeFile(inputPath, bookmarkFixture(), "utf8");
-    await writeReport(inputPath, reportPath);
-
-    const checkBookmarks = vi.fn(async (): Promise<BookmarkCheckResult[]> => {
-      throw new Error("不应该重新检测书签");
-    });
-    const classifyBookmarks = vi.fn(
-      async (
-        bookmarks: ExtractedBookmark[],
-        aiConfig: AiConfig,
-        options?: ClassifyBookmarksOptions,
-      ): Promise<BookmarkHtmlDocument> => {
-        void aiConfig;
-        void options;
-
-        return {
-          title: "Bookmarks",
-          folders: [
-            {
-              title: "AI分类",
-              folders: [],
-              bookmarks: bookmarks.map((bookmark) => ({
-                ...bookmark,
-                folderPath: ["AI分类"],
-              })),
-            },
-          ],
-          bookmarks: [],
-        };
-      },
-    );
-    const dependencies: CliDependencies = {
-      checkBookmarks,
-      classifyBookmarks,
-    };
-
-    await createProgram(dependencies).parseAsync([
-      "node",
-      "marksweep",
-      "classify",
-      inputPath,
-      "--check-report",
-      reportPath,
-      "--output",
-      outputPath,
-      "--base-url",
-      "https://api.example.com/v1",
-      "--model",
-      "demo-model",
-      "--api-key",
-      "sk-test",
-    ]);
-
-    const output = await readFile(outputPath, "utf8");
-    const parsedOutput = parseBookmarkHtml(output);
-    const classifiedBookmarks = classifyBookmarks.mock.calls[0]?.[0] ?? [];
-
-    expect(checkBookmarks).not.toHaveBeenCalled();
-    expect(classifiedBookmarks.map((bookmark) => bookmark.title)).toEqual(["Valid"]);
-    expect(parsedOutput.bookmarks.map((bookmark) => bookmark.title)).toEqual(["Valid", "Suspicious"]);
-    expect(parsedOutput.bookmarks.find((bookmark) => bookmark.title === "Broken")).toBeUndefined();
-    expect(parsedOutput.bookmarks.find((bookmark) => bookmark.title === "Suspicious")?.folderPath).toEqual(["其他"]);
   });
 });
 

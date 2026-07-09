@@ -6,32 +6,24 @@ describe("LangSmith observability config", () => {
     expect(resolveLangSmithConfig({}, {})).toEqual({ enabled: false });
   });
 
-  it("enables tracing from CLI options", () => {
+  it("enables tracing from the required LangSmith environment variables", () => {
     expect(
       resolveLangSmithConfig(
-        {
-          langsmith: true,
-          langsmithApiKey: "ls-cli",
-          langsmithProject: "custom-project",
-          langsmithEndpoint: "https://eu.api.smith.langchain.com",
-          langsmithWorkspaceId: "workspace-id",
-          langsmithHideInputs: true,
-          langsmithHideOutputs: true,
-        },
         {},
+        {
+          LANGSMITH_API_KEY: "ls-env",
+          LANGSMITH_PROJECT: "env-project",
+        },
       ),
     ).toEqual({
       enabled: true,
-      apiKey: "ls-cli",
-      project: "custom-project",
-      endpoint: "https://eu.api.smith.langchain.com",
-      workspaceId: "workspace-id",
-      hideInputs: true,
-      hideOutputs: true,
+      apiKey: "ls-env",
+      project: "env-project",
+      endpoint: "https://api.smith.langchain.com",
     });
   });
 
-  it("enables tracing from LangSmith environment variables", () => {
+  it("uses the configured LangSmith endpoint when provided", () => {
     expect(
       resolveLangSmithConfig(
         {},
@@ -39,21 +31,38 @@ describe("LangSmith observability config", () => {
           LANGSMITH_TRACING: "true",
           LANGSMITH_API_KEY: "ls-env",
           LANGSMITH_PROJECT: "env-project",
-          MARKSWEEP_LANGSMITH_HIDE_INPUTS: "yes",
-          MARKSWEEP_LANGSMITH_HIDE_OUTPUTS: "1",
+          LANGSMITH_ENDPOINT: "https://eu.api.smith.langchain.com",
         },
       ),
     ).toEqual({
       enabled: true,
       apiKey: "ls-env",
       project: "env-project",
-      hideInputs: true,
-      hideOutputs: true,
+      endpoint: "https://eu.api.smith.langchain.com",
     });
+  });
+
+  it("allows LANGSMITH_TRACING=false to disable env based tracing", () => {
+    expect(
+      resolveLangSmithConfig(
+        {},
+        {
+          LANGSMITH_TRACING: "false",
+          LANGSMITH_API_KEY: "ls-env",
+          LANGSMITH_PROJECT: "env-project",
+        },
+      ),
+    ).toEqual({ enabled: false });
   });
 
   it("requires an API key when tracing is enabled", () => {
     expect(() => resolveLangSmithConfig({ langsmith: true }, {})).toThrow("缺少 LangSmith API Key");
+  });
+
+  it("requires a project when tracing is enabled", () => {
+    expect(() => resolveLangSmithConfig({ langsmith: true }, { LANGSMITH_API_KEY: "ls-test" })).toThrow(
+      "缺少 LangSmith Project",
+    );
   });
 
   it("rejects invalid boolean environment values", () => {
@@ -68,10 +77,13 @@ describe("LangSmith observability config", () => {
   });
 
   it("creates a LangChain callbacks runtime when enabled", () => {
-    const config = resolveLangSmithConfig({ langsmith: true, langsmithApiKey: "ls-test" }, {});
+    const config = resolveLangSmithConfig(
+      { langsmith: true },
+      { LANGSMITH_API_KEY: "ls-test", LANGSMITH_PROJECT: "default" },
+    );
     const runtime = createLangSmithRuntime(config, "classify");
 
     expect(runtime?.callbacks).toHaveLength(1);
-    expect(runtime?.config.project).toBe("marksweep");
+    expect(runtime?.config.project).toBe("default");
   });
 });

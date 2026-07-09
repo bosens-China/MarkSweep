@@ -21,6 +21,8 @@ describe("createProgram", () => {
     expect(program.commands.find((command) => command.name() === "clean")?.helpInformation()).toContain(
       "--check-report",
     );
-    expect(classifyHelp).toContain("--check-report");
+    expect(classifyHelp).not.toContain("--check-report");
+    expect(classifyHelp).not.toContain("--concurrency");
+    expect(classifyHelp).not.toContain("--langsmith-api-key");
   });
 });

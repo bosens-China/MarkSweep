@@ -9,20 +9,9 @@ export interface StoredAiConfig {
   lang?: string;
 }
 
-export interface StoredLangSmithConfig {
-  enabled?: boolean;
-  apiKey?: string;
-  project?: string;
-  endpoint?: string;
-  workspaceId?: string;
-  hideInputs?: boolean;
-  hideOutputs?: boolean;
-}
-
 export interface MarkSweepUserConfig {
   version: 1;
   ai?: StoredAiConfig;
-  langSmith?: StoredLangSmithConfig;
 }
 
 export function createEmptyUserConfig(): MarkSweepUserConfig {
@@ -110,13 +99,6 @@ function normalizeUserConfig(value: Record<string, unknown>): MarkSweepUserConfi
     config.ai = pickStringFields(value.ai, ["baseUrl", "model", "apiKey", "lang"]);
   }
 
-  if (isPlainObject(value.langSmith)) {
-    config.langSmith = {
-      ...pickStringFields(value.langSmith, ["apiKey", "project", "endpoint", "workspaceId"]),
-      ...pickBooleanFields(value.langSmith, ["enabled", "hideInputs", "hideOutputs"]),
-    };
-  }
-
   return config;
 }
 
@@ -127,19 +109,6 @@ function pickStringFields(value: Record<string, unknown>, keys: string[]): Recor
     const item = value[key];
     if (typeof item === "string" && item.trim().length > 0) {
       output[key] = item.trim();
-    }
-  }
-
-  return output;
-}
-
-function pickBooleanFields(value: Record<string, unknown>, keys: string[]): Record<string, boolean> {
-  const output: Record<string, boolean> = {};
-
-  for (const key of keys) {
-    const item = value[key];
-    if (typeof item === "boolean") {
-      output[key] = item;
     }
   }
 

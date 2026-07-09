@@ -4,6 +4,7 @@ import type { ExtractedBookmark } from "../parser/bookmark-html.js";
 import { createBookmarkHtmlDocument, type BookmarkHtmlDocument } from "../writer/bookmark-html.js";
 import type { AiConfig } from "../cli/config.js";
 import { scoreTitle } from "../bookmarks/dedupe.js";
+import { normalizeBookmarkUrl } from "../bookmarks/url.js";
 import { BookmarkClassificationSchema, type BookmarkClassification, type ClassifiedFolder } from "./types.js";
 import { createFetchWebPageTool, type WebPageFetcherOptions } from "./tools/web-page-fetcher.js";
 
@@ -17,11 +18,8 @@ interface ToolLike {
 }
 
 export interface ToolCallingModelLike {
+  invoke(input: unknown): Promise<unknown>;
   bindTools?: (tools: Parameters<ChatOpenAI["bindTools"]>[0], options?: Record<string, unknown>) => RunnableLike;
-  withStructuredOutput: (
-    schema: Parameters<ChatOpenAI["withStructuredOutput"]>[0],
-    options?: Record<string, unknown>,
-  ) => RunnableLike;
 }
 
 export interface ClassifyBookmarksOptions {
@@ -32,7 +30,6 @@ export interface ClassifyBookmarksOptions {
 }
 
 interface BookmarkContext {
-  id: string;
   url: string;
   content: string;
 }
@@ -66,17 +63,33 @@ export async function classifyBookmarksWithModel(
   const lang = options.lang ?? "zh";
   const fetchTool = createFetchWebPageTool(options.fetcherOptions);
   const contexts = await collectModelRequestedContexts(bookmarks, model, fetchTool, options.maxToolCalls ?? 8);
-  const structuredModel = model.withStructuredOutput(BookmarkClassificationSchema, {
-    name: "bookmark_classification",
-  });
-  const rawResult = await structuredModel.invoke([
+  const rawResult = await model.invoke([
     ["system", createClassificationSystemPrompt(lang)],
     ["human", createClassificationUserPrompt(bookmarks, contexts)],
   ]);
-  const classification = BookmarkClassificationSchema.parse(rawResult);
+  const classification = parseClassificationResult(rawResult);
 
   validateClassification(bookmarks, classification);
   return classificationToHtmlDocument(bookmarks, classification);
+}
+
+export function parseClassificationResult(value: unknown): BookmarkClassification {
+  const direct = BookmarkClassificationSchema.safeParse(value);
+  if (direct.success) {
+    return direct.data;
+  }
+
+  const text = getTextContent(value);
+  if (!text) {
+    throw new Error("AI 分类结果不是有效 JSON。");
+  }
+
+  try {
+    return BookmarkClassificationSchema.parse(JSON.parse(extractJsonText(text)));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`AI 分类结果不是有效 JSON：${message}`, { cause: error });
+  }
 }
 
 export function classificationToHtmlDocument(
@@ -85,41 +98,46 @@ export function classificationToHtmlDocument(
 ): BookmarkHtmlDocument {
   validateClassification(bookmarks, classification);
 
-  const bookmarkById = new Map(bookmarks.map((bookmark) => [bookmark.id, bookmark]));
+  const bookmarkByUrl = createBookmarkUrlIndex(bookmarks);
   const assigned: ExtractedBookmark[] = [];
 
   for (const folder of classification.folders) {
-    collectClassifiedBookmarks(folder, [], bookmarkById, assigned);
+    collectClassifiedBookmarks(folder, [], bookmarkByUrl, assigned);
   }
 
   return createBookmarkHtmlDocument(assigned, { title: "Bookmarks" });
 }
 
 export function validateClassification(bookmarks: ExtractedBookmark[], classification: BookmarkClassification): void {
-  const expectedIds = new Set(bookmarks.map((bookmark) => bookmark.id));
+  const bookmarkByUrl = createBookmarkUrlIndex(bookmarks);
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   const unknown = new Set<string>();
 
-  for (const id of collectClassificationIds(classification.folders)) {
-    if (seen.has(id)) {
-      duplicates.add(id);
+  for (const url of collectClassificationUrls(classification.folders)) {
+    const bookmark = findBookmarkByUrl(bookmarkByUrl, url);
+    const key = bookmark ? normalizeBookmarkUrl(bookmark.url) : normalizeBookmarkUrl(url);
+
+    if (seen.has(key)) {
+      duplicates.add(url);
     }
 
-    if (!expectedIds.has(id)) {
-      unknown.add(id);
+    if (!bookmark) {
+      unknown.add(url);
     }
 
-    seen.add(id);
+    seen.add(key);
   }
 
-  const missing = [...expectedIds].filter((id) => !seen.has(id));
+  const missing = bookmarks
+    .filter((bookmark) => !seen.has(normalizeBookmarkUrl(bookmark.url)))
+    .map((bookmark) => bookmark.url);
 
   if (duplicates.size > 0 || unknown.size > 0 || missing.length > 0) {
     const parts = [
-      duplicates.size > 0 ? `重复 ID：${[...duplicates].join(", ")}` : undefined,
-      unknown.size > 0 ? `未知 ID：${[...unknown].join(", ")}` : undefined,
-      missing.length > 0 ? `缺失 ID：${missing.join(", ")}` : undefined,
+      duplicates.size > 0 ? `重复 URL：${[...duplicates].join(", ")}` : undefined,
+      unknown.size > 0 ? `未知 URL：${[...unknown].join(", ")}` : undefined,
+      missing.length > 0 ? `缺失 URL：${missing.join(", ")}` : undefined,
     ].filter(Boolean);
 
     throw new Error(`AI 分类结果不完整：${parts.join("；")}`);
@@ -174,7 +192,6 @@ async function collectModelRequestedContexts(
     }
 
     contexts.push({
-      id: bookmark.id,
       url,
       content: typeof output === "string" ? output : JSON.stringify(output),
     });
@@ -200,8 +217,9 @@ function createClassificationSystemPrompt(lang: string): string {
   return [
     "You are MarkSweep, a bookmark organization agent.",
     `Create folder names in this language: ${lang}.`,
+    "Return only valid JSON. Do not wrap it in Markdown.",
     "Generate a practical multi-level folder tree. Depth is unrestricted, but avoid over-fragmentation and keep top-level folder count moderate.",
-    "Every bookmark ID must appear exactly once.",
+    "Every bookmark URL must appear exactly once in folders[].bookmarks.",
     "Do not preserve the original folder structure.",
     "If a bookmark is unclear or low-confidence, put it under a folder named 其他 for Chinese output, or Other for non-Chinese output.",
   ].join("\n");
@@ -216,7 +234,7 @@ function createClassificationUserPrompt(bookmarks: ExtractedBookmark[], contexts
         folders: [
           {
             title: "folder name",
-            bookmarks: ["bookmark id"],
+            bookmarks: ["bookmark url"],
             children: [],
           },
         ],
@@ -227,13 +245,51 @@ function createClassificationUserPrompt(bookmarks: ExtractedBookmark[], contexts
   );
 }
 
+function getTextContent(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const candidate = value as { content?: unknown; text?: unknown };
+  if (typeof candidate.content === "string") {
+    return candidate.content;
+  }
+
+  if (Array.isArray(candidate.content)) {
+    return candidate.content
+      .map((part) =>
+        part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string"
+          ? (part as { text: string }).text
+          : undefined,
+      )
+      .filter((part): part is string => Boolean(part))
+      .join("\n");
+  }
+
+  return typeof candidate.text === "string" ? candidate.text : undefined;
+}
+
+function extractJsonText(text: string): string {
+  const trimmed = text.trim();
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  return start >= 0 && end >= start ? trimmed.slice(start, end + 1) : trimmed;
+}
+
 function toPromptBookmark(bookmark: ExtractedBookmark): {
-  id: string;
   title: string;
   url: string;
 } {
   return {
-    id: bookmark.id,
     title: bookmark.title,
     url: bookmark.url,
   };
@@ -242,13 +298,13 @@ function toPromptBookmark(bookmark: ExtractedBookmark): {
 function collectClassifiedBookmarks(
   folder: ClassifiedFolder,
   parentPath: string[],
-  bookmarkById: Map<string, ExtractedBookmark>,
+  bookmarkByUrl: Map<string, ExtractedBookmark>,
   assigned: ExtractedBookmark[],
 ): void {
   const path = [...parentPath, folder.title];
 
-  for (const id of folder.bookmarks) {
-    const bookmark = bookmarkById.get(id);
+  for (const url of folder.bookmarks) {
+    const bookmark = findBookmarkByUrl(bookmarkByUrl, url);
     if (bookmark) {
       assigned.push({
         ...bookmark,
@@ -258,19 +314,34 @@ function collectClassifiedBookmarks(
   }
 
   for (const child of folder.children) {
-    collectClassifiedBookmarks(child, path, bookmarkById, assigned);
+    collectClassifiedBookmarks(child, path, bookmarkByUrl, assigned);
   }
 }
 
-function collectClassificationIds(folders: ClassifiedFolder[]): string[] {
-  const ids: string[] = [];
+function collectClassificationUrls(folders: ClassifiedFolder[]): string[] {
+  const urls: string[] = [];
 
   for (const folder of folders) {
-    ids.push(...folder.bookmarks);
-    ids.push(...collectClassificationIds(folder.children));
+    urls.push(...folder.bookmarks);
+    urls.push(...collectClassificationUrls(folder.children));
   }
 
-  return ids;
+  return urls;
+}
+
+function createBookmarkUrlIndex(bookmarks: ExtractedBookmark[]): Map<string, ExtractedBookmark> {
+  const index = new Map<string, ExtractedBookmark>();
+
+  for (const bookmark of bookmarks) {
+    index.set(bookmark.url, bookmark);
+    index.set(normalizeBookmarkUrl(bookmark.url), bookmark);
+  }
+
+  return index;
+}
+
+function findBookmarkByUrl(index: Map<string, ExtractedBookmark>, url: string): ExtractedBookmark | undefined {
+  return index.get(url) ?? index.get(normalizeBookmarkUrl(url));
 }
 
 function getToolCalls(value: unknown): Array<{ name: string; args: Record<string, unknown> }> {

@@ -127,17 +127,7 @@ export function printLangSmithConfig(config: LangSmithConfig): void {
   console.log("  追踪：开启");
   console.log(`  项目：${config.project}`);
   console.log(`  API Key：${maskSecret(config.apiKey)}`);
-
-  if (config.endpoint) {
-    console.log(`  Endpoint：${config.endpoint}`);
-  }
-
-  if (config.workspaceId) {
-    console.log(`  Workspace：${config.workspaceId}`);
-  }
-
-  console.log(`  隐藏输入：${config.hideInputs ? "是" : "否"}`);
-  console.log(`  隐藏输出：${config.hideOutputs ? "是" : "否"}`);
+  console.log(`  Endpoint：${config.endpoint}`);
 }
 
 export function printPendingPipeline(message: string): void {
