@@ -28,6 +28,8 @@ Manual first publish:
 
 ```bash
 pnpm install
+pnpm typecheck
+pnpm lint
 pnpm build
 pnpm test
 pnpm pack --dry-run
@@ -44,10 +46,10 @@ Use these values:
 
 ```txt
 Provider: GitHub Actions
-Organization or user: <GitHub owner>
-Repository: <GitHub repository>
+Organization or user: bosens-China
+Repository: MarkSweep
 Workflow filename: release.yml
-Allowed action: npm publish
+Environment name: leave blank
 ```
 
 The workflow filename must be exactly `release.yml`, because the publishing workflow lives at:
@@ -56,15 +58,22 @@ The workflow filename must be exactly `release.yml`, because the publishing work
 .github/workflows/release.yml
 ```
 
+After saving the Trusted Publisher, select npm's recommended publishing access option that requires two-factor
+authentication and disallows tokens. Trusted Publishing continues to work through OIDC.
+
+In GitHub, enable `Settings > Actions > General > Allow GitHub Actions to create and approve pull requests` so Release
+Please can maintain its release PR.
+
 ## Release Flow
 
 Release automation uses `googleapis/release-please-action`.
 
 1. Merge normal changes to `main` using Conventional Commit messages.
-2. Release Please opens or updates a release PR.
-3. Merge the release PR when ready.
-4. Release Please creates the GitHub Release.
-5. The `publish` job publishes `@boses/marksweep` to npm using Trusted Publishing.
+2. Release Please reads those commits and opens or updates a release PR.
+3. The release PR updates `package.json`, `.release-please-manifest.json`, and `CHANGELOG.md`.
+4. Merge the release PR when ready.
+5. Release Please creates the version tag and GitHub Release.
+6. The `publish` job publishes `@boses/marksweep` to npm using Trusted Publishing with provenance.
 
 Useful commit prefixes:
 

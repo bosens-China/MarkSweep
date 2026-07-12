@@ -1,6 +1,6 @@
 # MarkSweep
 
-<img src="assets/logo-marksweep.png" alt="MarkSweep logo" width="160" />
+<img src="assets/logo-marksweep-npm.png" alt="MarkSweep logo" width="160" />
 
 English: [README.en.md](README.en.md)
 

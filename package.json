@@ -8,13 +8,15 @@
   },
   "files": [
     "dist",
+    "assets/logo-marksweep-npm.png",
     "docs",
     "README.md",
     "README.en.md"
   ],
   "scripts": {
     "dev": "tsx src/cli.ts",
-    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "pnpm clean && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json",
     "start": "node dist/cli.js",
     "lint": "eslint .",
@@ -22,6 +24,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "prepack": "pnpm build",
+    "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm test",
     "prepare": "husky"
   },
   "keywords": [
@@ -32,6 +36,14 @@
   ],
   "author": "yliu",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bosens-China/MarkSweep.git"
+  },
+  "homepage": "https://github.com/bosens-China/MarkSweep#readme",
+  "bugs": {
+    "url": "https://github.com/bosens-China/MarkSweep/issues"
+  },
   "engines": {
     "node": ">=20"
   },

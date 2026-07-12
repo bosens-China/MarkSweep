@@ -1,6 +1,6 @@
 # MarkSweep
 
-<img src="assets/logo-marksweep.png" alt="MarkSweep logo" width="160" />
+<img src="assets/logo-marksweep-npm.png" alt="MarkSweep logo" width="160" />
 
 中文文档: [README.md](README.md)
 
