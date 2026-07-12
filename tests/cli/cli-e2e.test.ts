@@ -7,6 +7,7 @@ import { parseBookmarkHtml } from "../../src/parser/bookmark-html";
 import { renderBookmarkHtml, type BookmarkHtmlDocument } from "../../src/writer/bookmark-html";
 import type { BookmarkCheckResult } from "../../src/checker/types";
 import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
+import type { SelectResultsToDelete } from "../../src/cli/selection";
 
 describe("CLI integration", () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
@@ -25,7 +26,7 @@ describe("CLI integration", () => {
     const outputPath = path.join(workspace, "cleaned.html");
     await writeFile(inputPath, bookmarkFixture(), "utf8");
 
-    const selectResultsToDelete = vi.fn(async (candidates: BookmarkCheckResult[]) =>
+    const selectResultsToDelete = vi.fn<SelectResultsToDelete>(async (candidates) =>
       candidates.filter((candidate) => candidate.bookmark.title === "Broken"),
     );
     const dependencies: CliDependencies = {
