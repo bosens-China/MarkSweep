@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   classificationToHtmlDocument,
-  classifyBookmarksWithModel,
-  parseClassificationResult,
+  classifyBookmarksWithAgent,
+  resolveCompatibility,
   validateClassification,
-  type ToolCallingModelLike,
 } from "../../src/classifier/bookmark-classifier";
 import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
 
@@ -48,134 +47,63 @@ describe("classification validation", () => {
 
     expect(document.folders[0]?.bookmarks.map((item) => item.id)).toEqual(["a"]);
   });
+});
 
-  it("parses JSON classification returned as model text", () => {
-    expect(
-      parseClassificationResult('```json\n{"folders":[{"title":"开发","bookmarks":[1],"children":[]}]}\n```'),
-    ).toEqual({
-      folders: [{ title: "开发", bookmarks: [1], children: [] }],
+describe("classifyBookmarksWithAgent", () => {
+  it("sends every bookmark to the agent and consumes its structured response", async () => {
+    const invoke = vi.fn(async (input: { messages: Array<{ role: "user"; content: string }> }) => {
+      expect(input.messages).toHaveLength(1);
+      return { structuredResponse: { folders: [{ title: "开发", bookmarks: [1, 2], children: [] }] } };
     });
+    const onProgress = vi.fn();
+    const first = bookmark("a", "TypeScript Documentation");
+    first.folderPath = ["旧目录"];
+    const document = await classifyBookmarksWithAgent([first, bookmark("b", "首页")], { invoke }, onProgress);
+
+    const prompt = invoke.mock.calls[0]?.[0].messages[0]?.content;
+    expect(prompt).toContain("TypeScript Documentation");
+    expect(prompt).toContain("首页");
+    expect(prompt).toContain("旧目录");
+    expect(onProgress).toHaveBeenCalledWith("正在由 AI 判断是否需要抓取网页并生成分类目录⋯⋯");
+    expect(onProgress).toHaveBeenLastCalledWith("正在校验分类结果⋯⋯");
+    expect(document.folders[0]?.bookmarks.map((item) => item.id)).toEqual(["a", "b"]);
+  });
+
+  it("rejects a missing structured response", async () => {
+    await expect(classifyBookmarksWithAgent([bookmark("a")], { invoke: async () => ({}) })).rejects.toThrow();
+  });
+
+  it("passes callbacks at the agent invocation level", async () => {
+    const invoke = vi.fn(async () => ({
+      structuredResponse: { folders: [{ title: "开发", bookmarks: [1], children: [] }] },
+    }));
+    const callbacks = [vi.fn()] as never;
+
+    await classifyBookmarksWithAgent([bookmark("a")], { invoke }, undefined, undefined, callbacks);
+
+    expect(invoke).toHaveBeenCalledWith(expect.any(Object), { callbacks });
   });
 });
 
-describe("classifyBookmarksWithModel", () => {
-  it("injects the requested response language into the Chinese prompt", async () => {
-    const invoke = vi.fn(async () => ({
-      folders: [{ title: "Development", bookmarks: [1], children: [] }],
-    }));
+describe("resolveCompatibility", () => {
+  const config = {
+    baseUrl: "https://api.deepseek.com",
+    model: "deepseek-v4-pro",
+    apiKey: "test-key",
+    lang: "zh",
+    compatibility: "auto" as const,
+  };
 
-    await classifyBookmarksWithModel([bookmark("a")], { invoke }, { lang: "English", maxToolCalls: 0 });
-
-    expect(invoke.mock.calls[0]?.[0]).toEqual(
-      expect.arrayContaining([["system", expect.stringContaining("回复语言以 English 为准")]]),
-    );
+  it("auto-detects only the official DeepSeek endpoint", () => {
+    expect(resolveCompatibility(config)).toBe("deepseek");
+    expect(resolveCompatibility({ ...config, baseUrl: "https://api.deepseek.com/v1" })).toBe("deepseek");
+    expect(resolveCompatibility({ ...config, baseUrl: "https://gateway.example.com/v1" })).toBe("openai");
   });
 
-  it("lets the model decide whether to call the fetch_web_page tool", async () => {
-    const boundInvoke = vi.fn(async () => ({
-      tool_calls: [{ name: "fetch_web_page", args: { url: "https://example.com" } }],
-    }));
-    const invoke = vi.fn(async () => '{"folders":[{"title":"其他","bookmarks":[1],"children":[]}]}');
-    const model: ToolCallingModelLike = {
-      invoke,
-      bindTools: vi.fn(() => ({ invoke: boundInvoke })),
-    };
-    const onProgress = vi.fn();
-    const inputBookmark = bookmark("a", "首页", "https://example.com");
-    inputBookmark.folderPath = ["旧目录", "AI"];
-
-    const document = await classifyBookmarksWithModel([inputBookmark], model, {
-      fetcherOptions: {
-        fetcher: async () =>
-          new Response(`Title: Example\nURL Source: https://example.com\n\nExample page content`, {
-            status: 200,
-          }) as never,
-      },
-      maxToolCalls: 1,
-      onProgress,
-    });
-
-    expect(model.bindTools).toHaveBeenCalled();
-    expect(boundInvoke).toHaveBeenCalled();
-    expect(invoke).toHaveBeenCalled();
-    expect(invoke.mock.calls[0]?.[0]).toEqual(
-      expect.arrayContaining([
-        ["system", expect.stringContaining("回复语言以 中文 为准")],
-        ["human", expect.stringContaining('"id": 1')],
-      ]),
-    );
-    expect(invoke.mock.calls[0]?.[0]).toEqual(
-      expect.arrayContaining([["system", expect.stringContaining("默认使用简洁的中文名词")]]),
-    );
-    expect(invoke.mock.calls[0]?.[0]).toEqual(
-      expect.arrayContaining([["system", expect.stringContaining("软性建议")]]),
-    );
-    expect(invoke.mock.calls[0]?.[0]).toEqual(
-      expect.arrayContaining([["human", expect.stringContaining('"original_path"')]]),
-    );
-    expect(invoke.mock.calls[0]?.[0]).toEqual(expect.arrayContaining([["human", expect.stringContaining("旧目录")]]));
-    expect(onProgress).toHaveBeenCalledWith("正在判断是否需要抓取网页内容⋯⋯");
-    expect(onProgress).toHaveBeenCalledWith("正在抓取网页 1/1：首页");
-    expect(onProgress).toHaveBeenLastCalledWith("正在校验分类结果⋯⋯");
-    expect(document.folders[0]?.title).toBe("其他");
-  });
-
-  it("continues classification when a requested webpage fetch fails", async () => {
-    const boundInvoke = vi.fn(async () => ({
-      tool_calls: [{ name: "fetch_web_page", args: { url: "https://example.com" } }],
-    }));
-    const invoke = vi.fn(async () => ({
-      folders: [{ title: "其他", bookmarks: [1], children: [] }],
-    }));
-    const model: ToolCallingModelLike = {
-      invoke,
-      bindTools: vi.fn(() => ({ invoke: boundInvoke })),
-    };
-
-    const document = await classifyBookmarksWithModel([bookmark("a", "首页", "https://example.com")], model, {
-      fetcherOptions: {
-        fetcher: async () => new Response("nope", { status: 500 }) as never,
-      },
-      maxToolCalls: 1,
-    });
-
-    expect(boundInvoke).toHaveBeenCalled();
-    expect(invoke).toHaveBeenCalled();
-    expect(document.folders[0]?.bookmarks.map((item) => item.id)).toEqual(["a"]);
-  });
-
-  it("allows multiple tool calls up to maxToolCalls", async () => {
-    const boundInvoke = vi.fn(async () => ({
-      tool_calls: [
-        { name: "fetch_web_page", args: { url: "https://example.com/a" } },
-        { name: "fetch_web_page", args: { url: "https://example.com/b" } },
-        { name: "fetch_web_page", args: { url: "https://example.com/c" } },
-      ],
-    }));
-    const invoke = vi.fn(async () => ({
-      folders: [{ title: "其他", bookmarks: [1, 2, 3], children: [] }],
-    }));
-    const fetcher = vi.fn(async () => new Response("Title: Example\n\nBody", { status: 200 }) as never);
-    const model: ToolCallingModelLike = {
-      invoke,
-      bindTools: vi.fn(() => ({ invoke: boundInvoke })),
-    };
-
-    await classifyBookmarksWithModel(
-      [
-        bookmark("a", "首页", "https://example.com/a"),
-        bookmark("b", "首页", "https://example.com/b"),
-        bookmark("c", "首页", "https://example.com/c"),
-      ],
-      model,
-      { fetcherOptions: { fetcher }, maxToolCalls: 2 },
-    );
-
-    expect(model.bindTools).toHaveBeenCalledWith(
-      expect.any(Array),
-      expect.objectContaining({ parallel_tool_calls: true }),
-    );
-    expect(fetcher).toHaveBeenCalledTimes(2);
+  it("allows proxy endpoints to explicitly select DeepSeek compatibility", () => {
+    expect(
+      resolveCompatibility({ ...config, baseUrl: "https://gateway.example.com/v1", compatibility: "deepseek" }),
+    ).toBe("deepseek");
   });
 });
 

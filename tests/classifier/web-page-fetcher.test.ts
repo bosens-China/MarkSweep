@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createFetchWebPageTool, fetchWebPageContent } from "../../src/classifier/tools/web-page-fetcher";
 
 describe("fetchWebPageContent", () => {
@@ -110,6 +110,19 @@ describe("createFetchWebPageTool", () => {
 
     expect(fetchWebPage.name).toBe("fetch_web_page");
     await expect(fetchWebPage.invoke({ url: "https://example.com" })).resolves.toContain('"source":"jina"');
+  });
+
+  it("only fetches URLs supplied by the current classification input", async () => {
+    const fetcher = vi.fn(async () => new Response("Title: Example\n\nBody", { status: 200 }) as never);
+    const onFetch = vi.fn();
+    const fetchWebPage = createFetchWebPageTool(
+      { fetcher },
+      { allowedUrls: new Set(["https://example.com/allowed"]), onFetch },
+    );
+
+    await expect(fetchWebPage.invoke({ url: "https://example.com/other" })).rejects.toThrow("只能抓取输入书签中的 URL");
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(onFetch).not.toHaveBeenCalled();
   });
 });
 

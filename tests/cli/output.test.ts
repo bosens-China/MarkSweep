@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { printCheckResultList, printLangSmithConfig } from "../../src/cli/output";
+import { formatDuration, printCheckResultList, printLangSmithConfig } from "../../src/cli/output";
 import type { BookmarkCheckResult } from "../../src/checker/types";
 import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
 
@@ -19,7 +19,7 @@ describe("CLI output", () => {
 
     printCheckResultList("明确无效", results);
 
-    const output = consoleLogSpy.mock.calls.map(([line]) => String(line)).join("\n");
+    const output = loggedLines(consoleLogSpy).join("\n");
     expect(output).toContain("Title 24  https://example.com/24");
     expect(output).not.toContain("(HTTP 404)");
     expect(output).not.toContain("还有");
@@ -32,13 +32,13 @@ describe("CLI output", () => {
       result("Forbidden", "https://example.com/forbidden", "suspicious", "forbidden", 403),
     ]);
 
-    const output = consoleLogSpy.mock.calls.map(([line]) => String(line)).join("\n");
+    const output = loggedLines(consoleLogSpy).join("\n");
     expect(output).toContain("HTTP 401：2 条");
     expect(output).toContain("需要认证或登录");
     expect(output).toContain("HTTP 403：1 条");
     expect(output).toContain("服务器拒绝访问");
 
-    const lines = consoleLogSpy.mock.calls.map(([line]) => String(line));
+    const lines = loggedLines(consoleLogSpy);
     const descriptionIndex = lines.findIndex((line) => line.includes("需要认证或登录"));
     expect(lines[descriptionIndex + 1]).toBe("");
   });
@@ -54,9 +54,22 @@ describe("CLI output", () => {
       "https://smith.langchain.com/o/workspace/projects/p/project",
     );
 
-    const output = consoleLogSpy.mock.calls.map(([line]) => String(line));
+    const output = loggedLines(consoleLogSpy);
     const endpointIndex = output.findIndex((line) => line.includes("Endpoint："));
     expect(output[endpointIndex + 1]).toContain("URL：https://smith.langchain.com/");
+  });
+});
+
+function loggedLines(spy: ReturnType<typeof vi.spyOn>): string[] {
+  return (spy.mock.calls as unknown[][]).map((call) => String(call[0]));
+}
+
+describe("formatDuration", () => {
+  it("uses minutes and seconds for durations of at least one minute", () => {
+    expect(formatDuration(999)).toBe("999 ms");
+    expect(formatDuration(59900)).toBe("59.9 秒");
+    expect(formatDuration(60000)).toBe("1 分钟 0 秒");
+    expect(formatDuration(125500)).toBe("2 分钟 6 秒");
   });
 });
 

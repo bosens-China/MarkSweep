@@ -7,6 +7,7 @@ export interface StoredAiConfig {
   model?: string;
   apiKey?: string;
   lang?: string;
+  compatibility?: "auto" | "openai" | "deepseek";
 }
 
 export interface MarkSweepUserConfig {
@@ -96,7 +97,7 @@ function normalizeUserConfig(value: Record<string, unknown>): MarkSweepUserConfi
   const config = createEmptyUserConfig();
 
   if (isPlainObject(value.ai)) {
-    config.ai = pickStringFields(value.ai, ["baseUrl", "model", "apiKey", "lang"]);
+    config.ai = pickStringFields(value.ai, ["baseUrl", "model", "apiKey", "lang", "compatibility"]);
   }
 
   return config;

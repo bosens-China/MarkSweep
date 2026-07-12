@@ -184,6 +184,7 @@ MarkSweep 会自动使用代理：
 ```txt
 --base-url <url>        OpenAI 兼容 API Base URL
 --model <name>          模型名称
+--compatibility <mode>  兼容模式：auto、openai、deepseek
 --api-key <key>         API Key
 --lang <language>       分类目录语言，默认 zh
 ```
@@ -200,11 +201,14 @@ CLI 参数 > 环境变量 > 本地配置 > 交互输入
 MARKSWEEP_AI_BASE_URL
 MARKSWEEP_AI_MODEL
 MARKSWEEP_AI_API_KEY
+MARKSWEEP_AI_COMPATIBILITY
 OPENAI_BASE_URL
 OPENAI_MODEL
 OPENAI_API_KEY
 MARKSWEEP_LANG
 ```
+
+`auto` 会为 `api.deepseek.com` 启用思考模式工具调用兼容；代理网关可显式使用 `deepseek`。
 
 交互输入的 AI 配置可以保存到本机。API Key 会以明文写入本地 JSON 文件。
 

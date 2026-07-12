@@ -24,6 +24,7 @@ import { parseBookmarkHtml } from "./parser/bookmark-html.js";
 import {
   assertWritableOutputPath,
   parseNonNegativeInteger,
+  parseAiCompatibility,
   parsePositiveInteger,
   readBookmarkHtmlFile,
   resolveAiConfig,
@@ -39,6 +40,7 @@ import {
   printCheckSummary,
   printDeduplicationSummary,
   printDetectionOptions,
+  formatDuration,
   printLangSmithConfig,
   printOutputTarget,
   printParsedSummary,
@@ -134,6 +136,7 @@ export function createProgram(dependencies: CliDependencies = defaultDependencie
     .option("--model <name>", "AI 模型名称")
     .option("--api-key <key>", "AI API Key")
     .option("--lang <language>", "分类目录语言，默认 zh")
+    .option("--compatibility <mode>", "AI 兼容模式：auto、openai、deepseek", parseAiCompatibility)
     .option("--langsmith", "启用 LangSmith 追踪")
     .action(async (inputPath: string, options: ClassifyOptions) => {
       await runClassifyCommand(inputPath, options, dependencies);
@@ -371,10 +374,6 @@ function printClassificationAnswer(answer: ClassificationAnswer): void {
   for (const bookmark of answer.missingBookmarks) {
     console.log(chalk.yellow(`  - ${bookmark.title}  ${bookmark.url}`));
   }
-}
-
-function formatDuration(durationMs: number): string {
-  return durationMs < 1000 ? `${durationMs} ms` : `${(durationMs / 1000).toFixed(1)} 秒`;
 }
 
 export type { BookmarkCheckResult, BookmarkHtmlDocument, CliDependencies, ExtractedBookmark };

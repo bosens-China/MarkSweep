@@ -184,6 +184,7 @@ MarkSweep uses proxies automatically:
 ```txt
 --base-url <url>        OpenAI-compatible API base URL
 --model <name>          Model name
+--compatibility <mode>  Compatibility mode: auto, openai, deepseek
 --api-key <key>         API key
 --lang <language>       Folder language. Default: zh
 ```
@@ -200,11 +201,14 @@ Supported environment variables:
 MARKSWEEP_AI_BASE_URL
 MARKSWEEP_AI_MODEL
 MARKSWEEP_AI_API_KEY
+MARKSWEEP_AI_COMPATIBILITY
 OPENAI_BASE_URL
 OPENAI_MODEL
 OPENAI_API_KEY
 MARKSWEEP_LANG
 ```
+
+`auto` enables thinking-mode tool compatibility for `api.deepseek.com`; use `deepseek` explicitly for gateways.
 
 Interactive AI config can be saved locally. The API key is stored as plain text in a local JSON file.
 

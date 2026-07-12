@@ -29,13 +29,17 @@ export interface RawAiOptions {
   model?: string;
   apiKey?: string;
   lang?: string;
+  compatibility?: AiCompatibility;
 }
+
+export type AiCompatibility = "auto" | "openai" | "deepseek";
 
 export interface AiConfig {
   baseUrl: string;
   model: string;
   apiKey: string;
   lang: string;
+  compatibility: AiCompatibility;
 }
 
 export interface WebPageFetcherConfig {
@@ -77,6 +81,11 @@ export function parseNonNegativeInteger(value: string): number {
   }
 
   return parsed;
+}
+
+export function parseAiCompatibility(value: string): AiCompatibility {
+  if (value === "auto" || value === "openai" || value === "deepseek") return value;
+  throw new InvalidArgumentError("必须是 auto、openai 或 deepseek");
 }
 
 export async function readBookmarkHtmlFile(inputPath: string): Promise<BookmarkInputFile> {
@@ -138,6 +147,7 @@ export async function resolveAiConfig(
   const rawModel = firstNonEmpty(rawOptions.model, env.MARKSWEEP_AI_MODEL, env.OPENAI_MODEL);
   const rawApiKey = firstNonEmpty(rawOptions.apiKey, env.MARKSWEEP_AI_API_KEY, env.OPENAI_API_KEY);
   const rawLang = firstNonEmpty(rawOptions.lang, env.MARKSWEEP_LANG);
+  const rawCompatibility = firstNonEmpty(rawOptions.compatibility, env.MARKSWEEP_AI_COMPATIBILITY);
   const needsUserConfig = !rawBaseUrl || !rawModel || !rawApiKey;
   const userConfig =
     context.userConfig ?? (needsUserConfig ? await loadUserConfig(configPath) : createEmptyUserConfig());
@@ -177,6 +187,9 @@ export async function resolveAiConfig(
       : undefined);
 
   const lang = firstNonEmpty(rawLang, userConfig.ai?.lang) ?? "zh";
+  const compatibility = parseStoredAiCompatibility(
+    firstNonEmpty(rawCompatibility, userConfig.ai?.compatibility) ?? "auto",
+  );
 
   async function promptForValue(callback: () => Promise<string>): Promise<string> {
     promptedForConfig = true;
@@ -204,6 +217,7 @@ export async function resolveAiConfig(
     model,
     apiKey,
     lang,
+    compatibility,
   };
 
   if (interactive && promptedForConfig && context.offerToSave !== false) {
@@ -218,6 +232,14 @@ export async function resolveAiConfig(
   }
 
   return config;
+}
+
+function parseStoredAiCompatibility(value: string): AiCompatibility {
+  try {
+    return parseAiCompatibility(value);
+  } catch {
+    throw new Error(`不支持的 AI 兼容模式：${value}`);
+  }
 }
 
 export function maskSecret(value: string): string {

@@ -22,6 +22,11 @@ export interface WebPageFetcherOptions {
   fetcher?: typeof undiciFetch;
 }
 
+interface WebPageToolControls {
+  allowedUrls?: ReadonlySet<string>;
+  onFetch?: (url: string) => void;
+}
+
 const defaultMaxChars = 6000;
 const defaultTimeoutMs = 10000;
 const defaultFirecrawlBaseUrl = "https://api.firecrawl.dev/v2";
@@ -66,9 +71,14 @@ export async function fetchWebPageContent(url: string, options: WebPageFetcherOp
   throw new Error(`网页抓取失败：${errors.join("; ")}`);
 }
 
-export function createFetchWebPageTool(options: WebPageFetcherOptions = {}) {
+export function createFetchWebPageTool(options: WebPageFetcherOptions = {}, controls: WebPageToolControls = {}) {
   return tool(
     async ({ url }) => {
+      if (controls.allowedUrls && !controls.allowedUrls.has(url)) {
+        throw new Error("只能抓取输入书签中的 URL。");
+      }
+
+      controls.onFetch?.(url);
       const result = await fetchWebPageContent(url, options);
       return JSON.stringify(result);
     },

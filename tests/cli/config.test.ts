@@ -7,6 +7,7 @@ import {
   assertWritableOutputPath,
   maskSecret,
   parseNonNegativeInteger,
+  parseAiCompatibility,
   parsePositiveInteger,
   readBookmarkHtmlFile,
   resolveAiConfig,
@@ -42,6 +43,12 @@ describe("CLI config helpers", () => {
     expect(() => parseNonNegativeInteger("-1")).toThrow("必须是大于等于 0 的整数");
   });
 
+  it("parses AI compatibility options", () => {
+    expect(parseAiCompatibility("auto")).toBe("auto");
+    expect(parseAiCompatibility("deepseek")).toBe("deepseek");
+    expect(() => parseAiCompatibility("other")).toThrow("auto、openai 或 deepseek");
+  });
+
   it("resolves AI config with CLI options before environment variables", async () => {
     const config = await resolveAiConfig(
       {
@@ -67,6 +74,7 @@ describe("CLI config helpers", () => {
       model: "cli-model",
       apiKey: "cli-key",
       lang: "en",
+      compatibility: "auto",
     });
   });
 
@@ -95,6 +103,7 @@ describe("CLI config helpers", () => {
       model: "cli-model",
       apiKey: "cli-key",
       lang: "en",
+      compatibility: "auto",
     });
   });
 
@@ -122,6 +131,7 @@ describe("CLI config helpers", () => {
       model: "cli-model",
       apiKey: "cli-key",
       lang: "zh",
+      compatibility: "auto",
     });
   });
 
@@ -135,6 +145,7 @@ describe("CLI config helpers", () => {
           OPENAI_BASE_URL: "https://openai.example.com/v1",
           OPENAI_MODEL: "env-model",
           OPENAI_API_KEY: "env-key",
+          MARKSWEEP_AI_COMPATIBILITY: "deepseek",
         },
       },
     );
@@ -144,6 +155,7 @@ describe("CLI config helpers", () => {
       model: "env-model",
       apiKey: "env-key",
       lang: "zh",
+      compatibility: "deepseek",
     });
   });
 
@@ -176,6 +188,7 @@ describe("CLI config helpers", () => {
       model: "local-model",
       apiKey: "local-key",
       lang: "ja",
+      compatibility: "auto",
     });
   });
 
@@ -208,6 +221,7 @@ describe("CLI config helpers", () => {
       model: "prompt-model",
       apiKey: "prompt-key",
       lang: "zh",
+      compatibility: "auto",
     });
     expect(prompts.confirm).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -222,6 +236,7 @@ describe("CLI config helpers", () => {
         model: "prompt-model",
         apiKey: "prompt-key",
         lang: "zh",
+        compatibility: "auto",
       },
     });
   });

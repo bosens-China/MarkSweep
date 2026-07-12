@@ -6,6 +6,19 @@ import type { ParsedBookmarkHtml } from "../parser/bookmark-html.js";
 import type { AiConfig, BookmarkInputFile, DetectionOptions } from "./config.js";
 import { maskSecret } from "./config.js";
 
+export function formatDuration(durationMs: number): string {
+  if (durationMs < 1000) {
+    return `${durationMs} ms`;
+  }
+
+  if (durationMs < 60000) {
+    return `${(durationMs / 1000).toFixed(1)} 秒`;
+  }
+
+  const totalSeconds = Math.round(durationMs / 1000);
+  return `${Math.floor(totalSeconds / 60)} 分钟 ${totalSeconds % 60} 秒`;
+}
+
 export function printParsedSummary(parsed: ParsedBookmarkHtml, inputFile: BookmarkInputFile): void {
   const webBookmarks = parsed.bookmarks.filter((bookmark) => bookmark.isWebUrl);
   const nonWebBookmarks = parsed.bookmarks.length - webBookmarks.length;
@@ -113,6 +126,7 @@ export function printAiConfig(config: AiConfig): void {
   console.log(`  模型：${config.model}`);
   console.log(`  API Key：${maskSecret(config.apiKey)}`);
   console.log(`  语言：${config.lang}`);
+  console.log(`  兼容模式：${config.compatibility}`);
 }
 
 export function printLangSmithConfig(config: LangSmithConfig, projectUrl?: string): void {
