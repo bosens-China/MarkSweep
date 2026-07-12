@@ -51,9 +51,12 @@ describe("CLI classify integration", () => {
     const checkBookmarks = vi.fn(async (): Promise<BookmarkCheckResult[]> => {
       throw new Error("不应该在 classify 中检测书签");
     });
+    const openBookmarkTreePreview = vi.fn(async () => path.join(workspace, "preview.html"));
     const dependencies: CliDependencies = {
       checkBookmarks,
       classifyBookmarks,
+      confirmOpenPreview: async () => true,
+      openBookmarkTreePreview,
     };
 
     await createProgram(dependencies).parseAsync([
@@ -76,9 +79,12 @@ describe("CLI classify integration", () => {
 
     expect(classifyBookmarks).toHaveBeenCalledOnce();
     expect(checkBookmarks).not.toHaveBeenCalled();
+    expect(openBookmarkTreePreview).toHaveBeenCalledOnce();
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("预览文件："));
     expect(consoleLogSpy).toHaveBeenCalledWith(
       expect.stringContaining("AI 分类回答：原始 3 个，去重后 3 个，输出 3 个，顶层分类 1 个"),
     );
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("AI 分类耗时："));
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("顶层目录：AI分类"));
     expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("遗漏：无"));
     expect(parsedOutput.folders.map((folder) => folder.title)).toContain("AI分类");

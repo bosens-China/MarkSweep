@@ -115,7 +115,7 @@ export function printAiConfig(config: AiConfig): void {
   console.log(`  语言：${config.lang}`);
 }
 
-export function printLangSmithConfig(config: LangSmithConfig): void {
+export function printLangSmithConfig(config: LangSmithConfig, projectUrl?: string): void {
   console.log("");
   console.log(chalk.bold("LangSmith"));
 
@@ -128,6 +128,9 @@ export function printLangSmithConfig(config: LangSmithConfig): void {
   console.log(`  项目：${config.project}`);
   console.log(`  API Key：${maskSecret(config.apiKey)}`);
   console.log(`  Endpoint：${config.endpoint}`);
+  if (projectUrl) {
+    console.log(`  URL：${projectUrl}`);
+  }
 }
 
 export function printPendingPipeline(message: string): void {

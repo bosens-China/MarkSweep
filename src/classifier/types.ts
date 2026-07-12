@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export interface ClassifiedFolder {
   title: string;
-  bookmarks: string[];
+  bookmarks: number[];
   children: ClassifiedFolder[];
 }
 
@@ -13,7 +13,7 @@ export interface BookmarkClassification {
 export const ClassifiedFolderSchema: z.ZodType<ClassifiedFolder> = z.lazy(() =>
   z.object({
     title: z.string().min(1),
-    bookmarks: z.array(z.string()).default([]),
+    bookmarks: z.array(z.number().int().positive()).default([]),
     children: z.array(ClassifiedFolderSchema).default([]),
   }),
 );

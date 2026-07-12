@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { printCheckResultList } from "../../src/cli/output";
+import { printCheckResultList, printLangSmithConfig } from "../../src/cli/output";
 import type { BookmarkCheckResult } from "../../src/checker/types";
 import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
 
@@ -41,6 +41,22 @@ describe("CLI output", () => {
     const lines = consoleLogSpy.mock.calls.map(([line]) => String(line));
     const descriptionIndex = lines.findIndex((line) => line.includes("需要认证或登录"));
     expect(lines[descriptionIndex + 1]).toBe("");
+  });
+
+  it("prints the LangSmith project URL below the endpoint", () => {
+    printLangSmithConfig(
+      {
+        enabled: true,
+        apiKey: "ls-test",
+        project: "default",
+        endpoint: "https://api.smith.langchain.com",
+      },
+      "https://smith.langchain.com/o/workspace/projects/p/project",
+    );
+
+    const output = consoleLogSpy.mock.calls.map(([line]) => String(line));
+    const endpointIndex = output.findIndex((line) => line.includes("Endpoint："));
+    expect(output[endpointIndex + 1]).toContain("URL：https://smith.langchain.com/");
   });
 });
 

@@ -74,10 +74,9 @@ export function createFetchWebPageTool(options: WebPageFetcherOptions = {}) {
     },
     {
       name: "fetch_web_page",
-      description:
-        "Fetches a bookmark page and returns LLM-friendly title, description, and content. Use only when the bookmark title is too vague to classify from title and URL.",
+      description: "抓取书签网页，返回便于模型理解的标题、描述和正文。仅当标题和 URL 不足以判断分类时使用。",
       schema: z.object({
-        url: z.string().url().describe("The bookmark URL to fetch."),
+        url: z.string().url().describe("需要抓取的书签 URL。"),
       }),
     },
   );

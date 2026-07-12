@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createLangSmithRuntime, resolveLangSmithConfig } from "../../src/observability/langsmith";
+import {
+  createLangSmithRuntime,
+  getLangSmithProjectUrl,
+  resolveLangSmithConfig,
+  type LangSmithRuntime,
+} from "../../src/observability/langsmith";
 
 describe("LangSmith observability config", () => {
   it("is disabled by default", () => {
@@ -85,5 +90,31 @@ describe("LangSmith observability config", () => {
 
     expect(runtime?.callbacks).toHaveLength(1);
     expect(runtime?.config.project).toBe("default");
+  });
+
+  it("resolves the project URL from the LangSmith client", async () => {
+    const runtime = {
+      client: {
+        getProjectUrl: async () => "https://smith.langchain.com/o/workspace/projects/p/project",
+      },
+      config: { enabled: true, apiKey: "ls-test", project: "default", endpoint: "https://api.smith.langchain.com" },
+      callbacks: [],
+    } as unknown as LangSmithRuntime;
+
+    await expect(getLangSmithProjectUrl(runtime)).resolves.toContain("/projects/p/project");
+  });
+
+  it("falls back to the LangSmith console when the project URL is unavailable", async () => {
+    const runtime = {
+      client: {
+        getProjectUrl: async () => {
+          throw new Error("project unavailable");
+        },
+      },
+      config: { enabled: true, apiKey: "ls-test", project: "new", endpoint: "https://api.smith.langchain.com" },
+      callbacks: [],
+    } as unknown as LangSmithRuntime;
+
+    await expect(getLangSmithProjectUrl(runtime)).resolves.toBe("https://smith.langchain.com");
   });
 });

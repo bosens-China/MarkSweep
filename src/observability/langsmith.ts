@@ -94,6 +94,18 @@ export async function flushLangSmithRuntime(runtime: LangSmithRuntime | undefine
   }
 }
 
+export async function getLangSmithProjectUrl(runtime: LangSmithRuntime | undefined): Promise<string | undefined> {
+  if (!runtime) {
+    return undefined;
+  }
+
+  try {
+    return await runtime.client.getProjectUrl({ projectName: runtime.config.project });
+  } catch {
+    return runtime.config.endpoint === defaultLangSmithEndpoint ? "https://smith.langchain.com" : undefined;
+  }
+}
+
 function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
   return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
 }

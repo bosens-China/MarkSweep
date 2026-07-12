@@ -2,6 +2,7 @@
 import path from "node:path";
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { confirm } from "@inquirer/prompts";
 import chalk from "chalk";
 import { Command } from "commander";
 import { config as loadDotEnv } from "dotenv";
@@ -14,6 +15,7 @@ import { createCheckReport, readCheckReportFile, stringifyCheckReport } from "./
 import {
   createLangSmithRuntime,
   flushLangSmithRuntime,
+  getLangSmithProjectUrl,
   resolveLangSmithConfig,
   type RawLangSmithOptions,
 } from "./observability/langsmith.js";
@@ -48,6 +50,7 @@ import { createBookmarkHtmlDocument, moveBookmarksToFolder, renderBookmarkHtml }
 import type { BookmarkCheckResult } from "./checker/types.js";
 import type { ExtractedBookmark } from "./parser/bookmark-html.js";
 import type { BookmarkHtmlDocument } from "./writer/bookmark-html.js";
+import { openBookmarkTreePreview } from "./preview/bookmark-tree.js";
 
 loadDotEnv({ quiet: true });
 
@@ -71,12 +74,20 @@ interface CliDependencies {
   checkBookmarks: typeof checkBookmarks;
   classifyBookmarks: typeof classifyBookmarks;
   selectResultsToDelete?: SelectResultsToDelete;
+  getLangSmithProjectUrl?: typeof getLangSmithProjectUrl;
+  confirmOpenPreview?: () => Promise<boolean>;
+  openBookmarkTreePreview?: typeof openBookmarkTreePreview;
 }
 
 const defaultDependencies: CliDependencies = {
   checkBookmarks,
   classifyBookmarks,
   selectResultsToDelete,
+  getLangSmithProjectUrl,
+  confirmOpenPreview: async () =>
+    Boolean(process.stdin.isTTY && process.stdout.isTTY) &&
+    confirm({ message: "是否在浏览器中打开分类结果预览？", default: true }),
+  openBookmarkTreePreview,
 };
 
 export function createProgram(dependencies: CliDependencies = defaultDependencies): Command {
@@ -258,31 +269,40 @@ async function runClassifyCommand(
   const aiConfig = await resolveAiConfig(options);
   const langSmithConfig = resolveLangSmithConfig(options);
   const langSmithRuntime = createLangSmithRuntime(langSmithConfig, "classify");
+  const langSmithProjectUrl = await dependencies.getLangSmithProjectUrl?.(langSmithRuntime);
   const parsed = parseBookmarkHtml(inputFile.html);
   const deduped = dedupeBookmarks(parsed.bookmarks);
 
   printParsedSummary(parsed, inputFile);
   printDeduplicationSummary(deduped);
   printAiConfig(aiConfig);
-  printLangSmithConfig(langSmithConfig);
+  printLangSmithConfig(langSmithConfig, langSmithProjectUrl);
   printOutputTarget(outputPath);
 
   const spinner = ora(deduped.bookmarks.length > 0 ? "正在调用 AI 分类书签⋯⋯" : "正在生成分类 HTML⋯⋯").start();
+  let aiDocument = createBookmarkHtmlDocument([], { title: "Bookmarks" });
+  let classificationDurationMs: number | undefined;
   try {
-    let aiDocument = createBookmarkHtmlDocument([], { title: "Bookmarks" });
-
     if (deduped.bookmarks.length > 0) {
+      const classificationStartedAt = Date.now();
       aiDocument = await dependencies.classifyBookmarks(deduped.bookmarks, aiConfig, {
         lang: aiConfig.lang,
         fetcherOptions: resolveWebPageFetcherConfig(),
         callbacks: langSmithRuntime?.callbacks,
+        onProgress: (message) => {
+          spinner.text = message;
+        },
       });
+      classificationDurationMs = Date.now() - classificationStartedAt;
     }
 
     const html = renderBookmarkHtml(aiDocument);
     const classificationAnswer = createClassificationAnswer(parsed.bookmarks.length, deduped.bookmarks, html);
     await writeFile(outputPath, html, "utf8");
     spinner.succeed("分类后的书签 HTML 已生成");
+    if (classificationDurationMs !== undefined) {
+      console.log(chalk.gray(`AI 分类耗时：${formatDuration(classificationDurationMs)}`));
+    }
     printClassificationAnswer(classificationAnswer);
   } catch (error) {
     spinner.fail("AI 分类失败");
@@ -292,6 +312,16 @@ async function runClassifyCommand(
     if (traceError) {
       const message = traceError instanceof Error ? traceError.message : String(traceError);
       console.warn(chalk.yellow(`LangSmith trace 提交失败：${message}`));
+    }
+  }
+
+  if ((await dependencies.confirmOpenPreview?.()) && dependencies.openBookmarkTreePreview) {
+    try {
+      const previewPath = await dependencies.openBookmarkTreePreview(aiDocument);
+      console.log(chalk.gray(`预览文件：${previewPath}`));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(chalk.yellow(`无法打开预览：${message}`));
     }
   }
 }
@@ -341,6 +371,10 @@ function printClassificationAnswer(answer: ClassificationAnswer): void {
   for (const bookmark of answer.missingBookmarks) {
     console.log(chalk.yellow(`  - ${bookmark.title}  ${bookmark.url}`));
   }
+}
+
+function formatDuration(durationMs: number): string {
+  return durationMs < 1000 ? `${durationMs} ms` : `${(durationMs / 1000).toFixed(1)} 秒`;
 }
 
 export type { BookmarkCheckResult, BookmarkHtmlDocument, CliDependencies, ExtractedBookmark };
