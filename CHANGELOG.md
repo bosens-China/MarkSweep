@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/bosens-China/MarkSweep/compare/marksweep-v0.1.2...marksweep-v0.1.3) (2026-07-13)
+
+
+### Bug Fixes
+
+* 使用 Node.js 24 发布 npm 包 ([0b52fbc](https://github.com/bosens-China/MarkSweep/commit/0b52fbc017e538e20272f64e8995e27a693b64e8))
+
 ## [0.1.2](https://github.com/bosens-China/MarkSweep/compare/marksweep-v0.1.1...marksweep-v0.1.2) (2026-07-13)
 
 
