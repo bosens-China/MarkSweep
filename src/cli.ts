@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -378,10 +379,16 @@ function printClassificationAnswer(answer: ClassificationAnswer): void {
 
 export type { BookmarkCheckResult, BookmarkHtmlDocument, CliDependencies, ExtractedBookmark };
 
-function isDirectRun(): boolean {
-  const currentFile = fileURLToPath(import.meta.url);
-  const entryFile = process.argv[1] ? path.resolve(process.argv[1]) : "";
-  return currentFile === entryFile;
+export function isDirectRun(
+  currentFile = fileURLToPath(import.meta.url),
+  entryFile = process.argv[1] ? path.resolve(process.argv[1]) : "",
+): boolean {
+  if (!entryFile) {
+    return false;
+  }
+
+  // npm 的 bin 入口可能是符号链接，需要比较真实路径。
+  return realpathSync(currentFile) === realpathSync(entryFile);
 }
 
 if (isDirectRun()) {

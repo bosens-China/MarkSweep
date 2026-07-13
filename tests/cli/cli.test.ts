@@ -1,5 +1,8 @@
+import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createProgram } from "../../src/cli";
+import { createProgram, isDirectRun } from "../../src/cli";
 
 describe("createProgram", () => {
   it("registers the public CLI commands", () => {
@@ -24,5 +27,15 @@ describe("createProgram", () => {
     expect(classifyHelp).not.toContain("--check-report");
     expect(classifyHelp).not.toContain("--concurrency");
     expect(classifyHelp).not.toContain("--langsmith-api-key");
+  });
+
+  it("recognizes an npm-style symlinked bin entry", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "marksweep-bin-"));
+    const target = path.join(directory, "cli.js");
+    const entry = path.join(directory, "marksweep");
+    writeFileSync(target, "", "utf8");
+    symlinkSync(target, entry);
+
+    expect(isDirectRun(target, entry)).toBe(true);
   });
 });
