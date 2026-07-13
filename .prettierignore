@@ -1,19 +1,9 @@
-node_modules/
-dist/
-coverage/
-.vitest/
-.nyc_output/
-.cache/
-.tmp/
-tmp/
-temp/
-
+# 自动生成文件
+CHANGELOG.md
 pnpm-lock.yaml
-bookmarks*.html
-tests/fixtures/*.html
-*.cleaned.html
-*.classified.html
 
+# 测试夹具需要保持原始格式
+tests/fixtures/
+
+# 项目内置的 Agent 技能及二进制
 .agents/
-.agemts/
-skills-lock.json
