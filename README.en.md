@@ -8,10 +8,14 @@ MarkSweep is a TypeScript CLI for browser bookmark cleanup. It reads an exported
 
 The original file is never modified by default.
 
-## Install
+## Usage
+
+Run MarkSweep directly with `npx` without a global installation. Using the explicit `@latest` tag selects the latest published version:
+
+Node.js 22.19.0 or later is required.
 
 ```bash
-npm install -g @boses/marksweep
+npx @boses/marksweep@latest --help
 ```
 
 Local development:
@@ -33,19 +37,19 @@ node dist/cli.js --help
 Check bookmarks:
 
 ```bash
-marksweep check bookmarks.html
+npx @boses/marksweep@latest check bookmarks.html
 ```
 
 Clean bookmarks:
 
 ```bash
-marksweep clean bookmarks.html -o bookmarks.cleaned.html
+npx @boses/marksweep@latest clean bookmarks.html -o bookmarks.cleaned.html
 ```
 
 Classify with AI:
 
 ```bash
-marksweep classify bookmarks.html \
+npx @boses/marksweep@latest classify bookmarks.html \
   --base-url https://api.openai.com/v1 \
   --model gpt-4.1-mini \
   --api-key "$OPENAI_API_KEY" \
@@ -55,7 +59,7 @@ marksweep classify bookmarks.html \
 Windows PowerShell:
 
 ```powershell
-marksweep classify bookmarks.html `
+npx @boses/marksweep@latest classify bookmarks.html `
   --base-url https://api.openai.com/v1 `
   --model gpt-4.1-mini `
   --api-key $env:OPENAI_API_KEY `
@@ -76,8 +80,8 @@ bookmarks.classified.html
 To remove broken links before classification, clean first and then classify the cleaned file:
 
 ```bash
-marksweep clean bookmarks.html -o bookmarks.cleaned.html
-marksweep classify bookmarks.cleaned.html -o bookmarks.classified.html
+npx @boses/marksweep@latest clean bookmarks.html -o bookmarks.cleaned.html
+npx @boses/marksweep@latest classify bookmarks.cleaned.html -o bookmarks.classified.html
 ```
 
 `classify` only runs AI classification. It does not re-check bookmark URLs.
@@ -89,7 +93,7 @@ marksweep classify bookmarks.cleaned.html -o bookmarks.classified.html
 Checks bookmark validity and prints a terminal report.
 
 ```bash
-marksweep check bookmarks.html \
+npx @boses/marksweep@latest check bookmarks.html \
   --concurrency 20 \
   --timeout 10000 \
   --retries 2
@@ -106,7 +110,7 @@ Optional:
 Checks, deduplicates, and writes a cleaned HTML file.
 
 ```bash
-marksweep clean bookmarks.html -o bookmarks.cleaned.html
+npx @boses/marksweep@latest clean bookmarks.html -o bookmarks.cleaned.html
 ```
 
 Before deletion, MarkSweep asks what to remove:
@@ -121,7 +125,7 @@ Suspicious links that are kept are moved to `其他`.
 Deduplicates bookmarks and sends them to the AI.
 
 ```bash
-marksweep classify bookmarks.html \
+npx @boses/marksweep@latest classify bookmarks.html \
   --base-url https://api.openai.com/v1 \
   --model gpt-4.1-mini \
   --api-key "$OPENAI_API_KEY" \

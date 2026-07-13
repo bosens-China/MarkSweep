@@ -8,10 +8,14 @@ MarkSweep 是一个 TypeScript 书签整理 CLI。它读取浏览器导出的 `b
 
 默认不会修改原始文件。
 
-## 安装
+## 使用
+
+推荐通过 `npx` 直接运行，无需全局安装。显式使用 `@latest` 可以获取最新发布版本：
+
+需要 Node.js 22.19.0 或更高版本。
 
 ```bash
-npm install -g @boses/marksweep
+npx @boses/marksweep@latest --help
 ```
 
 本地开发：
@@ -33,19 +37,19 @@ node dist/cli.js --help
 检测书签：
 
 ```bash
-marksweep check bookmarks.html
+npx @boses/marksweep@latest check bookmarks.html
 ```
 
 清理书签：
 
 ```bash
-marksweep clean bookmarks.html -o bookmarks.cleaned.html
+npx @boses/marksweep@latest clean bookmarks.html -o bookmarks.cleaned.html
 ```
 
 AI 分类：
 
 ```bash
-marksweep classify bookmarks.html \
+npx @boses/marksweep@latest classify bookmarks.html \
   --base-url https://api.openai.com/v1 \
   --model gpt-4.1-mini \
   --api-key "$OPENAI_API_KEY" \
@@ -55,7 +59,7 @@ marksweep classify bookmarks.html \
 Windows PowerShell：
 
 ```powershell
-marksweep classify bookmarks.html `
+npx @boses/marksweep@latest classify bookmarks.html `
   --base-url https://api.openai.com/v1 `
   --model gpt-4.1-mini `
   --api-key $env:OPENAI_API_KEY `
@@ -76,8 +80,8 @@ bookmarks.classified.html
 如果想先删除坏链再分类，先清理，再把清理后的文件交给 AI 分类：
 
 ```bash
-marksweep clean bookmarks.html -o bookmarks.cleaned.html
-marksweep classify bookmarks.cleaned.html -o bookmarks.classified.html
+npx @boses/marksweep@latest clean bookmarks.html -o bookmarks.cleaned.html
+npx @boses/marksweep@latest classify bookmarks.cleaned.html -o bookmarks.classified.html
 ```
 
 `classify` 只负责 AI 分类，不会重复检测书签有效性。
@@ -89,7 +93,7 @@ marksweep classify bookmarks.cleaned.html -o bookmarks.classified.html
 检测书签有效性，并在终端输出报告。
 
 ```bash
-marksweep check bookmarks.html \
+npx @boses/marksweep@latest check bookmarks.html \
   --concurrency 20 \
   --timeout 10000 \
   --retries 2
@@ -106,7 +110,7 @@ marksweep check bookmarks.html \
 检测、去重，并输出新的清理后 HTML。
 
 ```bash
-marksweep clean bookmarks.html -o bookmarks.cleaned.html
+npx @boses/marksweep@latest clean bookmarks.html -o bookmarks.cleaned.html
 ```
 
 删除前会进入交互选择：
@@ -121,7 +125,7 @@ marksweep clean bookmarks.html -o bookmarks.cleaned.html
 去重，然后把书签交给 AI 分类。
 
 ```bash
-marksweep classify bookmarks.html \
+npx @boses/marksweep@latest classify bookmarks.html \
   --base-url https://api.openai.com/v1 \
   --model gpt-4.1-mini \
   --api-key "$OPENAI_API_KEY" \
