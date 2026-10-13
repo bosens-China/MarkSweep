@@ -1,5 +1,7 @@
 # MarkSweep PRD
 
+> 本文保留原 CLI 版本的需求记录。当前版本已迁移为本地 Hono 服务 + React 工作台；最新用法与目录结构见 [README](../README.md)。
+
 ## 1. 产品概述
 
 MarkSweep 是一个基于 Node.js 与 TypeScript 编写的书签整理 CLI 工具，面向从浏览器导出的书签 HTML 文件。它提供两个核心能力：

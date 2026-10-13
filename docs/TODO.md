@@ -1,5 +1,28 @@
 # MarkSweep TODO
 
+## Local UI Migration
+
+- [x] 拆分 pnpm workspace：Web、Server、Core。
+- [x] 使用 Vite、React 和 Ant Design 实现书签工作台。
+- [x] 使用 Hono 提供本地 API，以 WebSocket 传输任务命令和进度。
+- [x] 支持任务取消、断线停止、工作副本恢复与 HTML 导出。
+- [x] 默认 npm 入口启动本地工作台，打包包含前后端产物。
+- [x] 保留旧 CLI 的回归测试，并补充 API 和 WebSocket 测试。
+- [x] 补齐旧 CLI JSON 检测报告导入、导出与复用。
+- [x] 支持 AI 配置确认保存、原子写入和 LangSmith 追踪链接。
+- [x] 使用 IndexedDB 保存工作副本，支持当前标签页刷新恢复。
+- [x] 通过本地兼容 AI 接口联调分类与流式审计。
+- [x] 接入 Deep Agents、可选整理要求与连续多轮调整。
+- [x] Crawlee 批量取证、缓存续读、采集预算与取消。
+- [x] mdream 正文转 Markdown；关联来源的跨站补充取证（两层、每书签三个补充页面、共享预算）。
+- [x] 续聊目录概览与候选元数据查询，模型/首次响应/工具/整轮耗时展示。
+- [x] 展示工具执行与流式消息，保存各轮结果并提供目录预览、变更对比和恢复。
+- [x] 使用 MiMo-V2.6-Flash 对真实 227 项书签完成全量整理和连续两轮验收。
+- [ ] 使用实际 AI 服务完成独立审计、异常场景与上线前验收。
+- [ ] 发布包含新 UI 的 npm 版本。
+
+以下为旧 CLI 版本的实现记录；历史路径已迁移，当前用法见 README。
+
 ## Phase 0: Project Setup
 
 - [x] 初始化 TypeScript CLI 项目基础配置。

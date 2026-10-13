@@ -2,6 +2,13 @@
 
 MarkSweep is published as the scoped public npm package `@boses/marksweep`.
 
+## Workspace Packaging
+
+Only the root package is published. `apps/web`, `apps/server`, and `packages/core` are private workspaces.
+`pnpm build` creates the browser assets in `dist/web` and bundles the Hono server with Core in `dist/server/main.js`.
+The npm bin now launches the local UI instead of the previous business commands; document this breaking change in the release notes.
+Check the tarball contains both directories, and smoke-test an installed package from outside the repository before release.
+
 ## Current npm Publishing Model
 
 npm recommends Trusted Publishing with OIDC for CI/CD releases. This avoids storing long-lived npm tokens in GitHub Secrets.
