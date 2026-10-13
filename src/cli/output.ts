@@ -1,10 +1,10 @@
 import chalk from "chalk";
-import type { DeduplicationResult } from "../bookmarks/dedupe.js";
-import type { BookmarkCheckResult, BookmarkCheckSummary } from "../checker/types.js";
-import type { LangSmithConfig } from "../observability/langsmith.js";
-import type { ParsedBookmarkHtml } from "../parser/bookmark-html.js";
-import type { AiConfig, BookmarkInputFile, DetectionOptions } from "./config.js";
-import { maskSecret } from "./config.js";
+import type { DeduplicationResult } from "@marksweep/core/bookmarks/dedupe";
+import type { BookmarkCheckResult, BookmarkCheckSummary } from "@marksweep/core/checker/types";
+import type { LangSmithConfig } from "@marksweep/core/observability/langsmith";
+import type { ParsedBookmarkHtml } from "@marksweep/core/parser/bookmark-html";
+import type { AiConfig, BookmarkInputFile, DetectionOptions } from "@marksweep/core/config/config";
+import { maskSecret } from "@marksweep/core/config/config";
 
 export function formatDuration(durationMs: number): string {
   if (durationMs < 1000) {

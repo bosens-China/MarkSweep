@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAutoProxyConfig } from "../../src/cli/proxy";
+import { resolveAutoProxyConfig } from "@marksweep/core/config/proxy";
 
 describe("auto proxy", () => {
   it("uses proxy environment variables first", () => {

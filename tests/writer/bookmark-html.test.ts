@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createBookmarkHtmlDocument, moveBookmarksToFolder, renderBookmarkHtml } from "../../src/writer/bookmark-html";
-import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
+import {
+  createBookmarkHtmlDocument,
+  moveBookmarksToFolder,
+  renderBookmarkHtml,
+} from "@marksweep/core/writer/bookmark-html";
+import type { ExtractedBookmark } from "@marksweep/core/parser/bookmark-html";
 
 describe("bookmark HTML writer", () => {
   it("renders a browser-importable Netscape bookmark file", () => {

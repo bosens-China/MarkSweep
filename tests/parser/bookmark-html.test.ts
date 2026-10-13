@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { isWebUrl, parseBookmarkHtml } from "../../src/parser/bookmark-html";
+import { isWebUrl, parseBookmarkHtml } from "@marksweep/core/parser/bookmark-html";
 
 const samplePath = fileURLToPath(new URL("../fixtures/browser-bookmark-export.html", import.meta.url));
 const sampleHtml = readFileSync(samplePath, "utf8");

@@ -2,8 +2,8 @@ import { tool } from "@langchain/core/tools";
 import { createAgent } from "langchain";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { DeepSeekChatModel } from "../../src/classifier/deepseek-chat-model";
-import { BookmarkClassificationSchema } from "../../src/classifier/types";
+import { DeepSeekChatModel } from "@marksweep/core/classifier/deepseek-chat-model";
+import { BookmarkClassificationSchema } from "@marksweep/core/classifier/types";
 
 describe("DeepSeekChatModel", () => {
   it("works with createAgent without tool_choice and preserves reasoning_content", async () => {

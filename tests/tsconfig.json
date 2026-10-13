@@ -5,7 +5,8 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "rootDir": "..",
-    "types": ["node"]
+    "types": ["node", "vite/client"],
+    "jsx": "react-jsx"
   },
-  "include": ["../src/**/*.ts", "./**/*.ts"]
+  "include": ["../src/**/*.ts", "../packages/**/*.ts", "../apps/server/src/**/*.ts", "./**/*.ts", "./**/*.tsx"]
 }

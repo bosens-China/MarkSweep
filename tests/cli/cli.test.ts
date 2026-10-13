@@ -8,17 +8,19 @@ describe("createProgram", () => {
   it("registers the public CLI commands", () => {
     const program = createProgram();
 
-    expect(program.commands.map((command) => command.name())).toEqual(["check", "clean", "classify"]);
+    expect(program.commands.map((command) => command.name())).toEqual(["check", "clean", "classify", "audit"]);
   });
 
   it("includes command descriptions in help output", () => {
     const program = createProgram();
     const help = program.helpInformation();
     const classifyHelp = program.commands.find((command) => command.name() === "classify")?.helpInformation() ?? "";
+    const auditHelp = program.commands.find((command) => command.name() === "audit")?.helpInformation() ?? "";
 
     expect(help).toContain("检查书签有效性");
     expect(help).toContain("检测书签并输出新的清理后 HTML 文件");
     expect(help).toContain("调用 AI 智能分类书签");
+    expect(help).toContain("流式输出疑似过时书签清单");
     expect(classifyHelp).toContain("--langsmith");
     expect(program.commands.find((command) => command.name() === "check")?.helpInformation()).toContain("--json");
     expect(program.commands.find((command) => command.name() === "clean")?.helpInformation()).toContain(
@@ -27,6 +29,8 @@ describe("createProgram", () => {
     expect(classifyHelp).not.toContain("--check-report");
     expect(classifyHelp).not.toContain("--concurrency");
     expect(classifyHelp).not.toContain("--langsmith-api-key");
+    expect(auditHelp).toContain("--max-pages");
+    expect(auditHelp).toContain("--langsmith");
   });
 
   it("recognizes an npm-style symlinked bin entry", () => {

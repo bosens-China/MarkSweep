@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile, chmod } from "node:fs/promises";
+import { mkdir, readFile, writeFile, chmod, rename, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 
@@ -72,10 +73,14 @@ export async function saveUserConfig(
   configPath = getDefaultUserConfigPath(),
 ): Promise<void> {
   await mkdir(path.dirname(configPath), { recursive: true });
-  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
+  const temporary = `${configPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    // 先写完整临时文件，避免保存失败时截断已有配置。
+    await rename(temporary, configPath);
+  } finally {
+    await rm(temporary, { force: true });
+  }
   await chmod(configPath, 0o600).catch(() => undefined);
 }
 

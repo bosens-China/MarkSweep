@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeBookmarkUrl } from "../../src/bookmarks/url";
+import { normalizeBookmarkUrl } from "@marksweep/core/bookmarks/url";
 
 describe("normalizeBookmarkUrl", () => {
   it("normalizes protocol and host casing", () => {

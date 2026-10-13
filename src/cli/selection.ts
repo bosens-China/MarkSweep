@@ -1,5 +1,5 @@
 import { checkbox } from "@inquirer/prompts";
-import type { BookmarkCheckResult } from "../checker/types.js";
+import type { BookmarkCheckResult } from "@marksweep/core/checker/types";
 
 export interface SelectResultsToDeleteOptions {
   message?: string;

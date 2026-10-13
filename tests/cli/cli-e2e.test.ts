@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createProgram, type CliDependencies } from "../../src/cli";
-import { parseBookmarkHtml } from "../../src/parser/bookmark-html";
-import { renderBookmarkHtml, type BookmarkHtmlDocument } from "../../src/writer/bookmark-html";
-import type { BookmarkCheckResult } from "../../src/checker/types";
-import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
+import { parseBookmarkHtml } from "@marksweep/core/parser/bookmark-html";
+import { renderBookmarkHtml, type BookmarkHtmlDocument } from "@marksweep/core/writer/bookmark-html";
+import type { BookmarkCheckResult } from "@marksweep/core/checker/types";
+import type { ExtractedBookmark } from "@marksweep/core/parser/bookmark-html";
 import type { SelectResultsToDelete } from "../../src/cli/selection";
 
 describe("CLI integration", () => {

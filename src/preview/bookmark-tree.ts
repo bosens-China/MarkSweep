@@ -3,7 +3,7 @@ import { writeFile, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { BookmarkFolderNode, BookmarkHtmlDocument } from "../writer/bookmark-html.js";
+import type { BookmarkFolderNode, BookmarkHtmlDocument } from "@marksweep/core/writer/bookmark-html";
 
 export function renderBookmarkTreePreview(document: BookmarkHtmlDocument): string {
   const title = escapeHtml(document.title ?? "Bookmarks");

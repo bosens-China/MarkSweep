@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createDeduplicationReport, dedupeBookmarks, scoreTitle } from "../../src/bookmarks/dedupe";
-import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
+import { createDeduplicationReport, dedupeBookmarks, scoreTitle } from "@marksweep/core/bookmarks/dedupe";
+import type { ExtractedBookmark } from "@marksweep/core/parser/bookmark-html";
 
 describe("dedupeBookmarks", () => {
   it("dedupes by normalized URL and keeps the more informative title", () => {

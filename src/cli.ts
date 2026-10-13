@@ -8,20 +8,23 @@ import chalk from "chalk";
 import { Command } from "commander";
 import { config as loadDotEnv } from "dotenv";
 import ora from "ora";
-import { dedupeBookmarks } from "./bookmarks/dedupe.js";
-import { normalizeBookmarkUrl } from "./bookmarks/url.js";
-import { checkBookmarks, summarizeCheckResults } from "./checker/bookmark-checker.js";
-import { classifyBookmarks } from "./classifier/bookmark-classifier.js";
-import { createCheckReport, readCheckReportFile, stringifyCheckReport } from "./cli/check-report-file.js";
+import { dedupeBookmarks } from "@marksweep/core/bookmarks/dedupe";
+import { checkBookmarks, summarizeCheckResults } from "@marksweep/core/checker/bookmark-checker";
+import { classifyBookmarks } from "@marksweep/core/classifier/bookmark-classifier";
+import { auditBookmarks } from "@marksweep/core/classifier/bookmark-auditor";
+import { registerAuditCommand } from "./cli/audit-command.js";
+import { createClassificationAnswer, printClassificationAnswer } from "./cli/classification-answer.js";
+import { createCheckReport, stringifyCheckReport } from "@marksweep/core/report/check-report-file";
+import { readCheckReportFile } from "./cli/check-report-file.js";
 import {
   createLangSmithRuntime,
   flushLangSmithRuntime,
   getLangSmithProjectUrl,
   resolveLangSmithConfig,
   type RawLangSmithOptions,
-} from "./observability/langsmith.js";
-import { getBrokenResults, getSuspiciousResults } from "./report/check-report.js";
-import { parseBookmarkHtml } from "./parser/bookmark-html.js";
+} from "@marksweep/core/observability/langsmith";
+import { getBrokenResults, getSuspiciousResults } from "@marksweep/core/report/check-report";
+import { parseBookmarkHtml } from "@marksweep/core/parser/bookmark-html";
 import {
   assertWritableOutputPath,
   parseNonNegativeInteger,
@@ -33,7 +36,7 @@ import {
   resolveWebPageFetcherConfig,
   type DetectionOptions,
   type RawAiOptions,
-} from "./cli/config.js";
+} from "@marksweep/core/config/config";
 import {
   printAiConfig,
   printCheckResultGroupDescriptions,
@@ -47,12 +50,16 @@ import {
   printParsedSummary,
 } from "./cli/output.js";
 import { createCheckProgressReporter } from "./cli/progress.js";
-import { installAutoProxy } from "./cli/proxy.js";
+import { installAutoProxy } from "@marksweep/core/config/proxy";
 import { selectResultsToDelete, type SelectResultsToDelete } from "./cli/selection.js";
-import { createBookmarkHtmlDocument, moveBookmarksToFolder, renderBookmarkHtml } from "./writer/bookmark-html.js";
-import type { BookmarkCheckResult } from "./checker/types.js";
-import type { ExtractedBookmark } from "./parser/bookmark-html.js";
-import type { BookmarkHtmlDocument } from "./writer/bookmark-html.js";
+import {
+  createBookmarkHtmlDocument,
+  moveBookmarksToFolder,
+  renderBookmarkHtml,
+} from "@marksweep/core/writer/bookmark-html";
+import type { BookmarkCheckResult } from "@marksweep/core/checker/types";
+import type { ExtractedBookmark } from "@marksweep/core/parser/bookmark-html";
+import type { BookmarkHtmlDocument } from "@marksweep/core/writer/bookmark-html";
 import { openBookmarkTreePreview } from "./preview/bookmark-tree.js";
 
 loadDotEnv({ quiet: true });
@@ -76,6 +83,7 @@ type ClassifyOptions = RawAiOptions & RawLangSmithOptions & OutputOption;
 interface CliDependencies {
   checkBookmarks: typeof checkBookmarks;
   classifyBookmarks: typeof classifyBookmarks;
+  auditBookmarks?: typeof auditBookmarks;
   selectResultsToDelete?: SelectResultsToDelete;
   getLangSmithProjectUrl?: typeof getLangSmithProjectUrl;
   confirmOpenPreview?: () => Promise<boolean>;
@@ -85,6 +93,7 @@ interface CliDependencies {
 const defaultDependencies: CliDependencies = {
   checkBookmarks,
   classifyBookmarks,
+  auditBookmarks,
   selectResultsToDelete,
   getLangSmithProjectUrl,
   confirmOpenPreview: async () =>
@@ -142,6 +151,8 @@ export function createProgram(dependencies: CliDependencies = defaultDependencie
     .action(async (inputPath: string, options: ClassifyOptions) => {
       await runClassifyCommand(inputPath, options, dependencies);
     });
+
+  registerAuditCommand(program, dependencies);
 
   return program;
 }
@@ -327,53 +338,6 @@ async function runClassifyCommand(
       const message = error instanceof Error ? error.message : String(error);
       console.warn(chalk.yellow(`无法打开预览：${message}`));
     }
-  }
-}
-
-interface ClassificationAnswer {
-  originalCount: number;
-  dedupedCount: number;
-  outputCount: number;
-  topFolders: string[];
-  missingBookmarks: ExtractedBookmark[];
-}
-
-function createClassificationAnswer(
-  originalCount: number,
-  dedupedBookmarks: ExtractedBookmark[],
-  outputHtml: string,
-): ClassificationAnswer {
-  const outputParsed = parseBookmarkHtml(outputHtml);
-  const outputUrls = new Set(outputParsed.bookmarks.map((bookmark) => normalizeBookmarkUrl(bookmark.url)));
-  const missingBookmarks = dedupedBookmarks.filter((bookmark) => !outputUrls.has(normalizeBookmarkUrl(bookmark.url)));
-
-  return {
-    originalCount,
-    dedupedCount: dedupedBookmarks.length,
-    outputCount: outputParsed.bookmarks.length,
-    topFolders: outputParsed.folders.filter((folder) => folder.path.length === 1).map((folder) => folder.title),
-    missingBookmarks,
-  };
-}
-
-function printClassificationAnswer(answer: ClassificationAnswer): void {
-  console.log(
-    chalk.green(
-      `AI 分类回答：原始 ${answer.originalCount} 个，去重后 ${answer.dedupedCount} 个，输出 ${answer.outputCount} 个，顶层分类 ${answer.topFolders.length} 个。`,
-    ),
-  );
-  if (answer.topFolders.length > 0) {
-    console.log(chalk.gray(`顶层目录：${answer.topFolders.join("、")}`));
-  }
-
-  if (answer.missingBookmarks.length === 0) {
-    console.log(chalk.gray("遗漏：无"));
-    return;
-  }
-
-  console.log(chalk.yellow(`遗漏：${answer.missingBookmarks.length} 个书签未进入输出文件`));
-  for (const bookmark of answer.missingBookmarks) {
-    console.log(chalk.yellow(`  - ${bookmark.title}  ${bookmark.url}`));
   }
 }
 

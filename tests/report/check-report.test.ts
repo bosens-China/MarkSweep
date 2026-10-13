@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getBrokenResults, getKeptResults, getSuspiciousResults } from "../../src/report/check-report";
-import type { BookmarkCheckResult } from "../../src/checker/types";
-import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
+import { getBrokenResults, getKeptResults, getSuspiciousResults } from "@marksweep/core/report/check-report";
+import type { BookmarkCheckResult } from "@marksweep/core/checker/types";
+import type { ExtractedBookmark } from "@marksweep/core/parser/bookmark-html";
 
 describe("check report helpers", () => {
   it("splits broken, suspicious, and kept results", () => {

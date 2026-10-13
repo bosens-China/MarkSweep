@@ -5,8 +5,8 @@ import {
   summarizeCheckResults,
   type CheckBookmarksProgress,
   type FetchLike,
-} from "../../src/checker/bookmark-checker";
-import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
+} from "@marksweep/core/checker/bookmark-checker";
+import type { ExtractedBookmark } from "@marksweep/core/parser/bookmark-html";
 
 describe("checkBookmark", () => {
   it("marks 2xx and 3xx responses as valid", async () => {

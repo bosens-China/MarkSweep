@@ -1,7 +1,7 @@
 import type { Callbacks } from "@langchain/core/callbacks/manager";
-import { ChatOpenAI } from "@langchain/openai";
+import { OpenAICompatibleChatModel } from "./openai-compatible-model.js";
 import { createAgent, toolCallLimitMiddleware } from "langchain";
-import type { AiConfig } from "../cli/config.js";
+import type { AiConfig } from "../config/config.js";
 import type { ExtractedBookmark } from "../parser/bookmark-html.js";
 import { createBookmarkHtmlDocument, type BookmarkHtmlDocument } from "../writer/bookmark-html.js";
 import { BookmarkClassificationSchema, type BookmarkClassification, type ClassifiedFolder } from "./types.js";
@@ -9,6 +9,7 @@ import { createFetchWebPageTool, type WebPageFetcherOptions } from "./tools/web-
 import { DeepSeekChatModel } from "./deepseek-chat-model.js";
 
 export interface ClassifyBookmarksOptions {
+  signal?: AbortSignal;
   lang?: string;
   fetcherOptions?: WebPageFetcherOptions;
   maxToolCalls?: number;
@@ -19,7 +20,7 @@ export interface ClassifyBookmarksOptions {
 interface ClassificationAgentLike {
   invoke(
     input: { messages: Array<{ role: "user"; content: string }> },
-    options?: { callbacks?: Callbacks },
+    options?: { callbacks?: Callbacks; signal?: AbortSignal },
   ): Promise<{ structuredResponse?: unknown }>;
 }
 
@@ -35,7 +36,7 @@ export async function classifyBookmarks(
           model: aiConfig.model,
           baseUrl: aiConfig.baseUrl,
         })
-      : new ChatOpenAI({
+      : new OpenAICompatibleChatModel({
           apiKey: aiConfig.apiKey,
           model: aiConfig.model,
           temperature: 0,
@@ -65,7 +66,14 @@ export async function classifyBookmarks(
     systemPrompt,
   });
 
-  return classifyBookmarksWithAgent(bookmarks, agent, options.onProgress, userPrompt, options.callbacks);
+  return classifyBookmarksWithAgent(
+    bookmarks,
+    agent,
+    options.onProgress,
+    userPrompt,
+    options.callbacks,
+    options.signal,
+  );
 }
 
 export async function classifyBookmarksWithAgent(
@@ -74,9 +82,13 @@ export async function classifyBookmarksWithAgent(
   onProgress?: (message: string) => void,
   userPrompt = createClassificationUserPrompt(bookmarks),
   callbacks?: Callbacks,
+  signal?: AbortSignal,
 ): Promise<BookmarkHtmlDocument> {
   onProgress?.("正在由 AI 判断是否需要抓取网页并生成分类目录⋯⋯");
-  const result = await agent.invoke({ messages: [{ role: "user", content: userPrompt }] }, { callbacks });
+  const result = await agent.invoke(
+    { messages: [{ role: "user", content: userPrompt }] },
+    { callbacks, ...(signal ? { signal } : {}) },
+  );
   const classification = BookmarkClassificationSchema.parse(result.structuredResponse);
 
   onProgress?.("正在校验分类结果⋯⋯");

@@ -14,6 +14,7 @@ export interface WebPageContent {
 }
 
 export interface WebPageFetcherOptions {
+  signal?: AbortSignal;
   firecrawlApiKey?: string;
   firecrawlBaseUrl?: string;
   jinaApiKey?: string;
@@ -32,9 +33,15 @@ const defaultTimeoutMs = 10000;
 const defaultFirecrawlBaseUrl = "https://api.firecrawl.dev/v2";
 
 export async function fetchWebPageContent(url: string, options: WebPageFetcherOptions = {}): Promise<WebPageContent> {
+  options.signal?.throwIfAborted();
   const maxChars = options.maxChars ?? defaultMaxChars;
   const timeoutMs = normalizeTimeoutMs(options.timeoutMs);
-  const fetcher = options.fetcher ?? undiciFetch;
+  const rawFetcher = options.fetcher ?? undiciFetch;
+  const fetcher: typeof undiciFetch = (input, init) =>
+    rawFetcher(input, {
+      ...init,
+      signal: options.signal ? AbortSignal.any([options.signal, ...(init?.signal ? [init.signal] : [])]) : init?.signal,
+    });
   const errors: string[] = [];
 
   if (options.firecrawlApiKey) {
@@ -47,6 +54,7 @@ export async function fetchWebPageContent(url: string, options: WebPageFetcherOp
         fetcher,
       });
     } catch (error) {
+      options.signal?.throwIfAborted();
       errors.push(`firecrawl: ${getErrorMessage(error)}`);
     }
   }
@@ -59,12 +67,14 @@ export async function fetchWebPageContent(url: string, options: WebPageFetcherOp
       fetcher,
     });
   } catch (error) {
+    options.signal?.throwIfAborted();
     errors.push(`jina: ${getErrorMessage(error)}`);
   }
 
   try {
     return await fetchWithPlainHtml(url, { maxChars, timeoutMs, fetcher });
   } catch (error) {
+    options.signal?.throwIfAborted();
     errors.push(`html: ${getErrorMessage(error)}`);
   }
 

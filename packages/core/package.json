@@ -1,0 +1,24 @@
+{
+  "name": "@marksweep/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@crawlee/cheerio": "3.18.2",
+    "@inquirer/prompts": "^8.5.2",
+    "@langchain/core": "^1.2.17",
+    "@langchain/openai": "^1.5.3",
+    "@mdream/js": "2.0.2",
+    "cheerio": "^1.2.0",
+    "commander": "^15.0.0",
+    "deepagents": "1.14.2",
+    "langchain": "^1.5.16",
+    "langsmith": "0.7.16",
+    "p-limit": "^7.3.0",
+    "undici": "^8.7.0",
+    "zod": "^4.4.3"
+  }
+}

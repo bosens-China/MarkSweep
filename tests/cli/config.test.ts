@@ -14,8 +14,8 @@ import {
   resolveDefaultOutputPath,
   resolveOutputPath,
   resolveWebPageFetcherConfig,
-} from "../../src/cli/config";
-import { getDefaultUserConfigPath, loadUserConfig, saveUserConfig } from "../../src/cli/user-config";
+} from "@marksweep/core/config/config";
+import { getDefaultUserConfigPath, loadUserConfig, saveUserConfig } from "@marksweep/core/config/user-config";
 
 describe("CLI config helpers", () => {
   it("builds default output paths next to the input file", () => {

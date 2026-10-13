@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatDuration, printCheckResultList, printLangSmithConfig } from "../../src/cli/output";
-import type { BookmarkCheckResult } from "../../src/checker/types";
-import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
+import type { BookmarkCheckResult } from "@marksweep/core/checker/types";
+import type { ExtractedBookmark } from "@marksweep/core/parser/bookmark-html";
 
 describe("CLI output", () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;

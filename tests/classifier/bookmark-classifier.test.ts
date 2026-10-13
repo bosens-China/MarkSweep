@@ -4,8 +4,8 @@ import {
   classifyBookmarksWithAgent,
   resolveCompatibility,
   validateClassification,
-} from "../../src/classifier/bookmark-classifier";
-import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
+} from "@marksweep/core/classifier/bookmark-classifier";
+import type { ExtractedBookmark } from "@marksweep/core/parser/bookmark-html";
 
 describe("classification validation", () => {
   it("throws when the AI response misses a bookmark", () => {

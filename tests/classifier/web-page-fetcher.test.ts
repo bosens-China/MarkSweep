@@ -1,7 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
-import { createFetchWebPageTool, fetchWebPageContent } from "../../src/classifier/tools/web-page-fetcher";
+import {
+  createFetchWebPageTool,
+  fetchWebPageContent,
+  type WebPageFetcherOptions,
+} from "@marksweep/core/classifier/tools/web-page-fetcher";
 
 describe("fetchWebPageContent", () => {
+  it("stops provider fallback when the task is cancelled", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn<NonNullable<WebPageFetcherOptions["fetcher"]>>(async () => {
+      controller.abort(new Error("cancelled"));
+      throw new Error("request aborted");
+    });
+    await expect(
+      fetchWebPageContent("https://example.com", { firecrawlApiKey: "test", fetcher, signal: controller.signal }),
+    ).rejects.toThrow("cancelled");
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
   it("uses Firecrawl first when an API key is available", async () => {
     const result = await fetchWebPageContent("https://example.com", {
       firecrawlApiKey: "fc-test",

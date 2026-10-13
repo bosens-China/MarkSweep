@@ -8,10 +8,14 @@ export default defineConfig([
     ignores: ["dist/**"],
   },
   {
-    files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
+    files: ["**/*.{js,mjs,cjs,ts,tsx,mts,cts}"],
     plugins: { js },
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
   },
   tseslint.configs.recommended,
+  {
+    files: ["apps/web/src/**/*.{ts,tsx}"],
+    languageOptions: { globals: globals.browser },
+  },
 ]);

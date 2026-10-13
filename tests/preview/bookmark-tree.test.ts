@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderBookmarkTreePreview } from "../../src/preview/bookmark-tree";
-import type { ExtractedBookmark } from "../../src/parser/bookmark-html";
+import type { ExtractedBookmark } from "@marksweep/core/parser/bookmark-html";
 
 describe("bookmark tree preview", () => {
   it("renders every bookmark in its nested folder", () => {

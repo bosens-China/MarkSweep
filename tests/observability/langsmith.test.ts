@@ -4,7 +4,7 @@ import {
   getLangSmithProjectUrl,
   resolveLangSmithConfig,
   type LangSmithRuntime,
-} from "../../src/observability/langsmith";
+} from "@marksweep/core/observability/langsmith";
 
 describe("LangSmith observability config", () => {
   it("is disabled by default", () => {

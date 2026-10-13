@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import ora from "ora";
-import type { BookmarkCheckResult } from "../checker/types.js";
-import type { CheckBookmarksProgress } from "../checker/bookmark-checker.js";
+import type { BookmarkCheckResult } from "@marksweep/core/checker/types";
+import type { CheckBookmarksProgress } from "@marksweep/core/checker/bookmark-checker";
 
 export function createCheckProgressReporter(spinner: ReturnType<typeof ora>, label: string) {
   return (progress: CheckBookmarksProgress): void => {
